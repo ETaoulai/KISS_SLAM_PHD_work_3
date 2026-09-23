@@ -29,6 +29,11 @@ from scipy.spatial.transform import Rotation
 
 W, UP, MIN_RANGE = 1024, 8, 1.0          # panorama columns · vertical upscaling for SIFT · drop the operator
 RATIO, RANSAC_THR, RANSAC_IT, MIN_INL, FIT_THR = 0.75, 0.30, 400, 10, 0.10
+# RANSAC stops once the best consensus so far makes a better one unlikely: after
+# log(1 - RANSAC_CONF) / log(1 - w^3) hypotheses, w = best inlier fraction (≈ 50 at w = 0.5 instead of
+# 400), never more than RANSAC_IT; hypotheses are drawn and scored RANSAC_BATCH at a time in numpy.
+# None = the fixed RANSAC_IT one-by-one loop of every result before fast_test (same random draws).
+RANSAC_CONF, RANSAC_BATCH = 0.999, 32
 EDGE_REL = 0.05                          # sub-pixel: neighbours' ranges within 5 % → same surface
 # Inlier test.  "metric": 3D distance < RANSAC_THR (m) — lets through intensity patterns that move WITH the sensor
 # (range / incidence falloff on near floors and walls): they match at the same pixel, look motionless, and bias the
@@ -223,14 +228,51 @@ def inliers(A, B, M):
     return (np.degrees(np.arccos(np.clip(cos, -1, 1))) < BEARING_THR) & (np.abs(ra - rb) < RANGE_REL * ra)
 
 
+def kabsch_batch(A, B):
+    """(K, 4, 4) M with A[k] ≈ R_k·B[k] + t_k, for K point sets (K, n, 3) at once (as kabsch)."""
+    ca, cb = A.mean(1), B.mean(1)
+    U, _, Vt = np.linalg.svd(np.einsum("kni,knj->kij", B - cb[:, None], A - ca[:, None]))
+    V, Ut = np.swapaxes(Vt, 1, 2), np.swapaxes(U, 1, 2)
+    D = np.tile(np.eye(3), (len(A), 1, 1))
+    D[:, 2, 2] = np.sign(np.linalg.det(V @ Ut))
+    R = V @ D @ Ut
+    M = np.tile(np.eye(4), (len(A), 1, 1))
+    M[:, :3, :3] = R
+    M[:, :3, 3] = ca - np.einsum("kij,kj->ki", R, cb)
+    return M
+
+
+def inliers_batch(A, B, M):
+    """(K, n) inlier masks of K hypotheses M (K, 4, 4), the test of `inliers`."""
+    Bm = np.einsum("kij,nj->kni", M[:, :3, :3], B) + M[:, None, :3, 3]
+    if INLIER_TEST == "metric":
+        return np.linalg.norm(A[None] - Bm, axis=2) < RANSAC_THR
+    ra, rb = np.linalg.norm(A, axis=1)[None], np.linalg.norm(Bm, axis=2)
+    cos = np.sum(A[None] * Bm, axis=2) / (ra * rb)
+    return (np.degrees(np.arccos(np.clip(cos, -1, 1))) < BEARING_THR) & (np.abs(ra - rb) < RANGE_REL * ra)
+
+
 def ransac(A, B, rng):
     best = None
-    for _ in range(RANSAC_IT):
-        i = rng.choice(len(A), 3, replace=False)
-        M = kabsch(A[i], B[i])
-        inl = inliers(A, B, M)
-        if best is None or inl.sum() > best.sum():
-            best = inl
+    if RANSAC_CONF is None:
+        for _ in range(RANSAC_IT):
+            i = rng.choice(len(A), 3, replace=False)
+            M = kabsch(A[i], B[i])
+            inl = inliers(A, B, M)
+            if best is None or inl.sum() > best.sum():
+                best = inl
+    else:
+        done, needed = 0, RANSAC_IT
+        while done < min(needed, RANSAC_IT):
+            k = min(RANSAC_BATCH, RANSAC_IT - done)
+            idx = np.argpartition(rng.random((k, len(A))), 3, axis=1)[:, :3]   # 3 distinct points per hypothesis
+            inl = inliers_batch(A, B, kabsch_batch(A[idx], B[idx]))
+            j = int(np.argmax(inl.sum(1)))                                    # first of the best, as the loop
+            if best is None or inl[j].sum() > best.sum():
+                best = inl[j]
+            done += k
+            w = best.sum() / len(A)
+            needed = 1 if w >= 1 else (np.inf if w == 0 else np.log(1 - RANSAC_CONF) / np.log(1 - w ** 3))
     if best is None or best.sum() < MIN_INL:
         return None, best
     return kabsch(A[best], B[best]), best
