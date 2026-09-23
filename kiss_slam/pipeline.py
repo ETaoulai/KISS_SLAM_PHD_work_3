@@ -116,7 +116,7 @@ class SlamPipeline(OdometryPipeline):
                      f"{' floor-only' if img.stuck_min is not None and img.stuck_floor_only else ''}"
                      f"{', + ICP initial guess' if img.use_as_initial_guess else ''}"
                      f", sigma {'fixed ' + format(img.fixed_sigma, 'g') if img.fixed_sigma is not None else 'adaptive'}"
-                     f", motion {'online, ' + img.detector.upper() if img.motion_file is None else img.motion_file})"
+                     f", motion {'online, ' + img.detector.upper() + (', parallel' if img.parallel else '') if img.motion_file is None else img.motion_file})"
                 if self.use_image_deskew
                 else "BASELINE (vanilla KISS-SLAM)"
             )
@@ -204,12 +204,27 @@ class SlamPipeline(OdometryPipeline):
     # ─────────────────────────────────────────────────────────────────────────
 
     def _run_pipeline(self):
+        # image_deskew.parallel: scan idx+1 is read and queued to the image-motion worker before the
+        # ICP of scan idx, so the two overlap.  Reading stays in order (serial rosbag reader).
+        prefetch = self.kiss_slam.image_motion_parallel
+        pending = None
         for idx in trange(self._first, self._last, unit=" frames", dynamic_ncols=True):
-            frame, timestamps, intensity, ring = self._next(idx)
+            if prefetch:
+                if pending is None:
+                    pending = self._next(idx)
+                    self.kiss_slam.submit_image_motion(*pending)
+                frame, timestamps, intensity, ring = pending
+                pending = None
+                if idx + 1 < self._last:
+                    pending = self._next(idx + 1)
+                    self.kiss_slam.submit_image_motion(*pending)
+            else:
+                frame, timestamps, intensity, ring = self._next(idx)
             start_time = time.perf_counter_ns()
             self.kiss_slam.process_scan(frame, timestamps, intensity, ring)
             self.times[idx - self._first] = time.perf_counter_ns() - start_time
             self.visualizer.update(self.kiss_slam)
+        self.kiss_slam.close_image_motion()
         self.kiss_slam.generate_new_node()
         self.kiss_slam.local_map_graph.erase_last_local_map()
         self.poses, self.pose_graph = self.kiss_slam.fine_grained_optimization()

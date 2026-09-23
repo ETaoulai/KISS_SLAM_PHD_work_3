@@ -164,6 +164,12 @@ class ImageDeskewConfig(BaseModel):
     # "vector" (per-scan, noisier; see #039).
     trans_min_range: Optional[float] = None
     trans_mode: str = "auto"
+    # Online estimate in a separate worker process: SlamPipeline hands it scan k+1 before the ICP of
+    # scan k, so image motion and ICP overlap and a scan costs max(image, ICP) instead of their sum.
+    # One worker, scans in order: the same motions as the serial estimate.
+    parallel: bool = False
+    # Seed of the estimator's RANSAC: another seed is an independent run, for the spread (#037).
+    seed: int = 0
     # Precomputed motion (.npz with "motion" (N,4,4), NaN where failed) from
     # scripts/precompute_i3_motion.py, indexed by scan counter.  None = estimate online
     # from the raw scan (needs intensity and ring per point).

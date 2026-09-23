@@ -20,6 +20,8 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
+from collections import deque
+
 import numpy as np
 import open3d as o3d
 from kiss_icp.kiss_icp import KissICP
@@ -32,6 +34,27 @@ from kiss_slam.local_map_graph import LocalMapGraph
 from kiss_slam.loop_closer import LoopCloser
 from kiss_slam.pose_graph_optimizer import PoseGraphOptimizer
 from kiss_slam.voxel_map import VoxelMap
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Image-motion worker process (image_deskew.parallel)
+# ─────────────────────────────────────────────────────────────────────────────
+
+_WORKER_ESTIMATOR = None
+
+
+def _motion_worker_init(estimator_kwargs, module_knobs):
+    """Runs once in the worker: the module-level knobs of the parent, then the estimator."""
+    global _WORKER_ESTIMATOR
+    import kiss_slam.intensity_deskew as idsk
+
+    for name, value in module_knobs.items():
+        setattr(idsk, name, value)
+    _WORKER_ESTIMATOR = idsk.ScanMotionEstimator(**estimator_kwargs)
+
+
+def _motion_worker(frame, timestamps, intensity, ring):
+    return _WORKER_ESTIMATOR.motion(frame, timestamps, intensity, ring)[0]
 
 
 def transform_points(pcd, T):
@@ -326,6 +349,8 @@ class KissSLAM:
                 "pick one arm (--image-deskew or --use-intensity)."
             )
         self._image_motion_est = None      # online estimator
+        self._motion_pool = None           # image_deskew.parallel: worker process running the estimator
+        self._motion_futures = deque()     # motions submitted to it, oldest first
         self._image_motions = None         # precomputed (N,4,4), NaN where failed
         # Index in the sequence of the first scan fed to process_scan: the precomputed
         # file has one row per scan of the whole sequence.  SlamPipeline sets it to its
@@ -346,7 +371,8 @@ class KissSLAM:
                 if self.image_cfg.trans_min_range is not None:      # near-field bias correction (#039)
                     _idsk.TRANS_MIN_RANGE = self.image_cfg.trans_min_range
                     _idsk.TRANS_MODE = self.image_cfg.trans_mode
-                self._image_motion_est = ScanMotionEstimator(
+                estimator_kwargs = dict(
+                    seed=self.image_cfg.seed,
                     model=self.image_cfg.model,
                     subpixel=self.image_cfg.subpixel,
                     stuck_min=self.image_cfg.stuck_min,
@@ -357,6 +383,21 @@ class KissSLAM:
                     surf_hessian=self.image_cfg.surf_hessian_threshold,
                     surf_upright=self.image_cfg.surf_upright,
                 )
+                if self.image_cfg.parallel:
+                    # "spawn": a fork would copy the parent's TBB / OpenCV thread state.  The worker
+                    # gets the module knobs as they are NOW (scripts set them before building KissSLAM).
+                    import multiprocessing
+                    from concurrent.futures import ProcessPoolExecutor
+
+                    knobs = {k: v for k, v in vars(_idsk).items() if k.isupper()}
+                    self._motion_pool = ProcessPoolExecutor(
+                        max_workers=1,
+                        mp_context=multiprocessing.get_context("spawn"),
+                        initializer=_motion_worker_init,
+                        initargs=(estimator_kwargs, knobs),
+                    )
+                else:
+                    self._image_motion_est = ScanMotionEstimator(**estimator_kwargs)
 
         # Diagnostics-only KDTree cache (never affects the trajectory).
         self.diag_cfg = config.diagnostics
@@ -642,11 +683,37 @@ class KissSLAM:
                     "kiss_slam.tools.point_cloud2.read_point_cloud_raw as the dataset reader "
                     "(SlamPipeline does this) or set image_deskew.motion_file."
                 )
-            M, _ = self._image_motion_est.motion(frame, timestamps, intensity, ring)
+            if self._motion_pool is not None:
+                if not self._motion_futures:        # the caller did not prefetch: submit now and wait
+                    self.submit_image_motion(frame, timestamps, intensity, ring)
+                M = self._motion_futures.popleft().result()
+            else:
+                M, _ = self._image_motion_est.motion(frame, timestamps, intensity, ring)
         if M is None:
             self.n_image_motion_failures += 1
             return np.eye(4)
         return np.asarray(M, dtype=np.float64)
+
+    @property
+    def image_motion_parallel(self):
+        """True when the image motion runs in a worker process (image_deskew.parallel, online)."""
+        return self._motion_pool is not None
+
+    def submit_image_motion(self, frame, timestamps, intensity, ring):
+        """Queue the image motion of a scan in the worker; process_scan of that scan collects it.
+
+        Scans must be submitted in the order they are processed (one worker: they run in that
+        order, so the estimator sees the same sequence as the serial one).
+        """
+        self._motion_futures.append(
+            self._motion_pool.submit(_motion_worker, frame, timestamps, intensity, ring)
+        )
+
+    def close_image_motion(self):
+        if self._motion_pool is not None:
+            self._motion_pool.shutdown(cancel_futures=True)
+            self._motion_pool = None
+            self._motion_futures.clear()
 
     def _register_frame_image_motion(self, frame, timestamps, intensity, ring):
         """KissICP.register_frame (kiss_icp 1.3.0) with the image motion in place of last_delta.

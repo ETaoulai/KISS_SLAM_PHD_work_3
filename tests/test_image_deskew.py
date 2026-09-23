@@ -20,6 +20,10 @@ from kiss_slam.config import load_config
 from kiss_slam.original_slam_files.slam_original import KissSLAM as UpstreamKissSLAM
 from kiss_slam.slam import KissSLAM
 from kiss_slam.tools.point_cloud2 import read_point_cloud_raw
+import kiss_slam.intensity_deskew as _idsk
+
+# (c) compares with an npz made before fast_test: its fixed 400-hypothesis RANSAC (same random draws).
+_idsk.RANSAC_CONF = None
 
 N, N_ONLINE, TOL, TOL_MOTION = 150, 60, 1e-9, 1e-6
 CFG, BAG = Path("configs/indoor_fast.yaml"), Path("data/church_02_cut.bag")
