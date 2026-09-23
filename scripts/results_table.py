@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """All results in one table: every sequence x arm, mean ± σ over its runs, against the ground truth.
 
-    python scripts/results_table.py [<data root>] [--out=<prefix>]
+    python scripts/results_table.py [<data root>] [--out=<prefix>] [--offset=best]
 
 Reads the run folders under <data root>/runs (default /media/photogrammetry/A26C3DDF6C3DAF431/data) with the
 evaluation of scripts/evaluate_ncd.py, and writes <prefix>.md and <prefix>.csv (default <data root>/runs/results_all).
 Sequences: Newer College 2020 01_short (#041), the five of 2021 (#043), Oxford Spires christ-church-02 / -03 full
-recordings.  Arms are the run-folder names up to the first "_" (kiss, sift, surf); folders that do not exist are skipped.
+recordings.  --offset=best: every run is scored at its own best time shift (evaluate_ncd.best_offset, #045),
+default <prefix> then results_all_best_offset.  Arms are the run-folder names up to the first "_" (kiss, sift, surf); folders that do not exist are skipped.
 """
 import csv
 import sys
@@ -18,7 +19,9 @@ sys.path.insert(0, str(Path(__file__).parent))
 from evaluate_ncd import evaluate, load_gt  # noqa: E402
 
 ROOT = Path(next((a for a in sys.argv[1:] if not a.startswith("--")), "/media/photogrammetry/A26C3DDF6C3DAF431/data"))
-OUT = Path(next((a.split("=", 1)[1] for a in sys.argv[1:] if a.startswith("--out=")), ROOT / "runs" / "results_all"))
+OFFSET = "best" if "--offset=best" in sys.argv else 0.0
+OUT = Path(next((a.split("=", 1)[1] for a in sys.argv[1:] if a.startswith("--out=")),
+                ROOT / "runs" / ("results_all_best_offset" if OFFSET == "best" else "results_all")))
 NC, RUNS = ROOT / "newer_college", ROOT / "runs"
 
 # (dataset, sequence, sensor, ground truth, frame, runs folder)
@@ -39,7 +42,7 @@ ARMS = {"kissnodeskew": "KISS-SLAM, no deskew", "kissdetail": "KISS-SLAM, indoor
         "sift": "i3 + SIFT", "surf": "i3 + SURF"}
 METRICS = [("ate", "ATE [m]", "{:.3f}"), ("rpe_t", "RPE 1 s [cm]", "{:.2f}"), ("rpe_r", "RPE 1 s [°]", "{:.3f}"),
            ("path", "path [m]", "{:.1f}"), ("excess", "path vs GT [%]", "{:+.1f}"), ("z_rmse", "z RMSE [m]", "{:.3f}"),
-           ("kitti", "KITTI [%]", "{:.2f}"), ("fail", "image fails", "{:.0f}")]
+           ("kitti", "KITTI [%]", "{:.2f}"), ("fail", "image fails", "{:.0f}"), ("offset", "time shift [s]", "{:+.3f}")]
 
 
 def main():
@@ -50,7 +53,7 @@ def main():
             print(f"skip {seq}: no runs in {folder}")
             continue
         gt_t, gt_T, _ = load_gt(gt, frame)
-        res = {r.name: evaluate(gt_t, gt_T, r) for r in runs}
+        res = {r.name: evaluate(gt_t, gt_T, r, OFFSET) for r in runs}
         for v in res.values():
             v["excess"] = 100 * (v["path"] / v["gt_path"] - 1)
         gt_path = next(iter(res.values()))["gt_path"]
@@ -78,7 +81,11 @@ def main():
         s, sd = f.format(r[c]), r[c + "_sd"]
         return s + (" ± " + f.replace("+", "").format(sd) if not np.isnan(sd) and sd > 1e-9 else "")
 
-    lines = ["# Results against the ground truth", "",
+    lines = ["# Results against the ground truth" + (" — each run at its best time shift" if OFFSET == "best" else ""), "",
+             ("Every run is scored at the time shift (added to its scan stamps) that minimises its rotation RPE over 1 s, "
+              "searched in -0.15..+0.25 s (last column).  Arms differ in which instant of the sweep a pose stands for, and "
+              "the rotation RPE of a hand-held sensor doubles within 50 ms of shift (#045).  " if OFFSET == "best" else
+              "Scan stamps as recorded (shift 0).  "),
              "KISS-SLAM default config (the setting of the KISS-SLAM paper), except the arms \"KISS-SLAM, indoor_detail\" "
              "(configs/indoor_detail.yaml: voxel 0.25 m, max range 50 m, local maps 15 m) and \"KISS-SLAM, no deskew\" "
              "(configs/kiss_paper_nodeskew.yaml: paper config, deskew off).  Mean ± σ over the runs of each arm "
@@ -91,7 +98,7 @@ def main():
     for key in dict.fromkeys((r["dataset"], r["sequence"]) for r in rows):
         grp = [r for r in rows if (r["dataset"], r["sequence"]) == key]
         best = {c: min((r for r in grp if not np.isnan(r[c])), key=lambda r: abs(r[c]) if c == "excess" else r[c], default=None)
-                for c, _, _ in METRICS if c not in ("path", "fail")}
+                for c, _, _ in METRICS if c not in ("path", "fail", "offset")}
         for i, r in enumerate(grp):
             cells = []
             for c, _, f in METRICS:

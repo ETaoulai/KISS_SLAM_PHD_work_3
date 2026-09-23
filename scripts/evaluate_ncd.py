@@ -2,6 +2,7 @@
 """Runs of scripts/run_ncd.py against a ground truth, grouped by arm.
 
     python scripts/evaluate_ncd.py <ground truth> <run dir> [<run dir> ...] [--frame=ncd2020|ncd2021|spires|none]
+                                   [--offset=<s>|best]
 
 ground truth: a Newer College 2020 sequence dir (its ground_truth/registered_poses.csv), or a file:
               "#sec,nsec,x,y,z,qx,qy,qz,qw" csv (2020, 2021) or TUM "t x y z qx qy qz qw" (2021 tum_format,
@@ -16,6 +17,9 @@ Each run dir is the out dir of one run_ncd.py call; its name up to the first "_"
 (kiss_a -> kiss, sift_s2 -> sift).  The ground truth is interpolated at the scan times (SLERP) in
 its own world frame, so z is up and the vertical error means height; each trajectory is aligned to
 it rigidly (Umeyama, no scale).
+
+--offset: seconds added to the scan stamps before the GT is interpolated (default 0); "best": per run, the shift
+that minimises the rotation RPE over 1 s (best_offset, searched in -0.15..0.25 s), reported in the table (#045).
 
 Per run: ATE RMSE, RPE over 1 s (translation, rotation), path length vs GT, vertical RMSE, the KITTI
 relative error (kiss_icp's sequence_error), ms/scan and image-motion failures from the log.  Per arm:
@@ -67,11 +71,34 @@ def load_gt(path, frame):
     return t, T, frame
 
 
-def evaluate(gt_t, gt_T, run):
+def _raw_path(gt_t, gt_T, t0, t1):
+    k = (gt_t >= t0) & (gt_t <= t1)
+    return np.linalg.norm(np.diff(gt_T[k, :3, 3], axis=0), axis=1).sum()
+
+
+def best_offset(gt_t, gt_T, st, est, lo=-0.15, hi=0.25, step=0.005):
+    """Time shift (s) added to the scan stamps that minimises the rotation RPE over 1 s.
+
+    Which instant a pose stands for depends on the arm: with deskew KISS expresses the scan in one
+    frame of the sweep, without deskew the cloud is a blur of the whole sweep, and the ground-truth
+    stamps have their own convention.  The rotation RPE of a hand-held sensor changes by 2x within
+    50 ms of shift (#045), so comparing arms at one fixed shift favours whichever happens to match it.
+    """
+    def rot(o):
+        ok, g = interpolate(gt_t, gt_T, st + o)
+        return rpe(est[ok], g, st[ok], 1.0)[1].mean()
+    grid = np.arange(lo, hi + step / 2, step)
+    return float(grid[int(np.argmin([rot(o) for o in grid]))])
+
+
+def evaluate(gt_t, gt_T, run, offset=0.0):
+    """offset: seconds added to the scan stamps, or "best" (best_offset)."""
     from kiss_icp.metrics import sequence_error
 
     st, est = load_tum(find_tum(run))
-    ok, gt = interpolate(gt_t, gt_T, st)
+    if offset == "best":
+        offset = best_offset(gt_t, gt_T, st, est)
+    ok, gt = interpolate(gt_t, gt_T, st + offset)
     est, st = est[ok], st[ok]
     kitti_t, _ = sequence_error(gt, est)
     est = umeyama_rigid(est[:, :3, 3], gt[:, :3, 3]) @ est
@@ -81,11 +108,14 @@ def evaluate(gt_t, gt_T, run):
     log = log.read_text(errors="replace") if log.exists() else ""
     num = lambda pat: float(m[1]) if (m := re.search(pat, log)) else np.nan
     return dict(
-        n=len(est), matched=ok.mean(),
+        n=len(est), matched=ok.mean(), offset=offset,
         ate=np.sqrt((err ** 2).mean()), ate_max=err.max(),
         rpe_t=rt.mean() * 100, rpe_r=rr.mean(),
         path=np.linalg.norm(np.diff(est[:, :3, 3], axis=0), axis=1).sum(),
-        gt_path=np.linalg.norm(np.diff(gt[:, :3, 3], axis=0), axis=1).sum(),
+        # From the RAW ground-truth samples over the span of the scans: interpolating the GT between its samples
+        # smooths its own high-frequency noise, so a GT path from interpolated poses would shrink with the time shift
+        # (01_short: 8 % at -45 ms), and "path vs GT" would change with the shift although the estimate does not.
+        gt_path=_raw_path(gt_t, gt_T, st[0], st[-1]),
         z_rmse=np.sqrt(((est[:, 2, 3] - gt[:, 2, 3]) ** 2).mean()),
         kitti=kitti_t,
         ms=num(r"Average Runtime\s+([\d.]+)"),
@@ -95,14 +125,16 @@ def evaluate(gt_t, gt_T, run):
 
 COLS = [("ate", "ATE [m]", "{:.3f}"), ("rpe_t", "RPE 1 s [cm]", "{:.2f}"), ("rpe_r", "RPE 1 s [deg]", "{:.3f}"),
         ("path", "path [m]", "{:.1f}"), ("z_rmse", "z RMSE [m]", "{:.3f}"), ("kitti", "KITTI [%]", "{:.2f}"),
-        ("ms", "ms/scan", "{:.0f}"), ("fail", "image fails", "{:.0f}")]
+        ("ms", "ms/scan", "{:.0f}"), ("fail", "image fails", "{:.0f}"), ("offset", "shift [s]", "{:+.3f}")]
 
 
 def main():
     frame = next((a.split("=", 1)[1] for a in sys.argv[1:] if a.startswith("--frame=")), None)
+    offset = next((a.split("=", 1)[1] for a in sys.argv[1:] if a.startswith("--offset=")), "0")
+    offset = offset if offset == "best" else float(offset)
     args = [a for a in sys.argv[1:] if not a.startswith("--")]
     gt_t, gt_T, frame = load_gt(args[0], frame)
-    res = {Path(r).name: evaluate(gt_t, gt_T, Path(r)) for r in args[1:]}
+    res = {Path(r).name: evaluate(gt_t, gt_T, Path(r), offset) for r in args[1:]}
     v0 = next(iter(res.values()))
     print(f"GT {args[0]} (frame {frame}): {len(gt_t)} poses, path over the scans {v0['gt_path']:.1f} m; "
           f"scans inside the GT span: {min(v['matched'] for v in res.values()) * 100:.1f} % or more\n")
