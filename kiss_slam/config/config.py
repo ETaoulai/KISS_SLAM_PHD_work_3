@@ -139,6 +139,9 @@ class ImageDeskewConfig(BaseModel):
     # surf_hessian_threshold: higher = fewer, stronger keypoints (OpenCV default 100).
     # surf_upright: no keypoint orientation (U-SURF); the panorama is never rotated in-plane.
     detector: Literal["sift", "surf"] = "sift"
+    # Multiplies the raw intensity before the panorama, which clips at 255 (built for the Hesai
+    # 0-255 scale).  1.0 = Hesai.  Ouster (0 to ~1100, median 150-450): 255/1024 = 0.249 (#041).
+    intensity_scale: float = 1.0
     surf_hessian_threshold: float = 100.0
     surf_upright: bool = False
     # Drop matches that are the same point in the sensor frame, |p - q| < stuck_min (m):

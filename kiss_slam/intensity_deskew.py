@@ -500,11 +500,13 @@ class ScanMotionEstimator:
 
     def __init__(self, period=0.1, seed=0, model="cv", subpixel=False,
                  stuck_min=_DEFAULT, floor_only=_DEFAULT, elev=_DEFAULT, range_=_DEFAULT,
-                 detector="sift", surf_hessian=100.0, surf_upright=False):
+                 detector="sift", surf_hessian=100.0, surf_upright=False, intensity_scale=1.0):
         """`stuck_min`, `floor_only`, `elev`, `range_`: the stuck-match filter (#025-#027);
         left at their defaults they read the module globals STUCK_* at each call.
-        `detector`, `surf_hessian`, `surf_upright`: the panorama features, see make_detector."""
+        `detector`, `surf_hessian`, `surf_upright`: the panorama features, see make_detector.
+        `intensity_scale`: multiplies the raw intensity (1.0 Hesai, 255/1024 Ouster, #041)."""
         self.period, self.model, self.subpixel = period, model, subpixel
+        self.intensity_scale = intensity_scale
         self.stuck_min, self.floor_only, self.elev, self.range_ = stuck_min, floor_only, elev, range_
         self.detector_name = detector
         self.detector = make_detector(detector, surf_hessian, surf_upright)
@@ -514,6 +516,8 @@ class ScanMotionEstimator:
         self.ratios = []; self.last_factor = 1.0
 
     def motion(self, xyz, ts, inten, ring):
+        if self.intensity_scale != 1.0:
+            inten = inten * self.intensity_scale
         cur = features(xyz, ts, inten, ring, self.detector)
         prev, self.prev = self.prev, cur
         self.last_params, self.last_t_start = None, cur[5]

@@ -103,10 +103,17 @@ def read_point_cloud_raw(
     `scripts/precompute_i3_motion.py::read_raw`, so the online estimate reproduces the
     precomputed one.
 
+    Point times are made ABSOLUTE, in seconds.  The estimator fits one motion over two
+    consecutive scans and needs the previous scan's points to be earlier than the current
+    one's (#041).  Hesai stores absolute float seconds (kept as they are); Ouster stores `t`,
+    uint32 ns from the start of the sweep (0-0.1 s): an integer time field is taken as ns,
+    and times that are not epoch seconds (< 1e6 s) as relative to the message stamp, which
+    is added.  KISS normalises the times itself, so its deskew is unaffected.
+
     Returns
     -------
     points     : (N, 3) float64 – XYZ positions (NaN rows removed)
-    timestamps : (N,) float64  – per-point timestamps (empty array if absent)
+    timestamps : (N,) float64  – absolute per-point times in seconds (empty array if absent)
     intensity  : (N,) float64  – intensity as stored in the message (NOT normalised),
                                   or None if the message carries no intensity-like field
     ring       : (N,) int64    – laser/ring index, or None if absent
@@ -129,6 +136,11 @@ def read_point_cloud_raw(
     valid = ~np.any(np.isnan(points), axis=1)
     points = points[valid]
     timestamps = s[t_field].astype(np.float64)[valid] if t_field else np.array([])
+    if t_field and len(timestamps):
+        if np.issubdtype(s[t_field].dtype, np.integer):              # Ouster `t`: ns
+            timestamps = timestamps * 1e-9
+        if timestamps.max() < 1e6:                                    # relative to the sweep
+            timestamps = timestamps + msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9
     intensity = s[i_field].astype(np.float64)[valid] if i_field else None
     ring = s[r_field].astype(np.int64)[valid] if r_field else None
     return points.astype(np.float64), timestamps, intensity, ring

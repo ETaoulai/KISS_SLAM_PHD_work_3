@@ -12,10 +12,10 @@ intensity, ring and the measured time `t` of every point.  `__getitem__` returns
   seconds.  intensity_deskew fits one motion over two consecutive scans and needs the previous
   scan's points to be earlier than the current one's; with `t` alone both scans run 0-0.1 s and
   every motion came out wrong (~100 deg, ~17 m per scan).  KISS normalises the times itself.
-- intensity: the Ouster signal runs 0 to ~1100 (median 150-450 on 01_short), while the
-  intensity panorama clips at 255 (it was built for the Hesai 0-255 scale).  Multiplied by one
-  fixed `intensity_scale` (default 255/1024) for every scan: a change of units, no per-scan
-  normalisation.
+- intensity: RAW Ouster signal, 0 to ~1100 (median 150-450 on 01_short).  The panorama clips at
+  255, so the image-motion deskew needs `image_deskew.intensity_scale: 0.249` (255/1024) for
+  Ouster; scripts/run_ncd.py sets it.  (`intensity_scale` here multiplies it in the reader
+  instead; default 1.0.)
 - points without a return (range 0, xyz = 0) are dropped.
 - gt_poses: one per scan (the file has a pose at every scan time), moved from the camera frame
   to the LiDAR frame with the same T_CL as kiss_icp's loader and expressed relative to the
@@ -48,7 +48,7 @@ def read_pcd(path):
 
 
 class NewerCollege2020Pcd:
-    def __init__(self, data_dir, intensity_scale=255.0 / 1024.0):
+    def __init__(self, data_dir, intensity_scale=1.0):
         self.data_dir = Path(data_dir)
         self.sequence_id = self.data_dir.name
         self.intensity_scale = intensity_scale

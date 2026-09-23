@@ -373,6 +373,7 @@ class KissSLAM:
                     _idsk.TRANS_MODE = self.image_cfg.trans_mode
                 estimator_kwargs = dict(
                     seed=self.image_cfg.seed,
+                    intensity_scale=self.image_cfg.intensity_scale,
                     model=self.image_cfg.model,
                     subpixel=self.image_cfg.subpixel,
                     stuck_min=self.image_cfg.stuck_min,
