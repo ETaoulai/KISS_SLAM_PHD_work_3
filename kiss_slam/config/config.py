@@ -157,6 +157,11 @@ class ImageDeskewConfig(BaseModel):
     # Adaptive threshold: fixed at this value (m) for the whole run (#031).
     # None = KISS adaptive (updated from the ICP correction of the initial guess).
     fixed_sigma: Optional[float] = 2.0
+    # Ablation (#046), applied to the image motion before BOTH its uses (deskew, initial guess):
+    # use_parts "full" | "translation" (no rotation) | "rotation" (no translation);
+    # rotation_smoothing k > 1: mean rotation vector of the last k successful image motions (causal).
+    use_parts: Literal["full", "translation", "rotation"] = "full"
+    rotation_smoothing: int = 1
     # Near-field bias of intensity matching (#039): matches closer than ~5 m report only ~74 %
     # of the true translation, those beyond ~12 m report 100 %, so every translation comes out
     # 1.5-5 % short.  With trans_min_range set (m), the correction is measured online and

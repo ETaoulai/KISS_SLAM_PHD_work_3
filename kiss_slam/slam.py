@@ -351,6 +351,7 @@ class KissSLAM:
         self._image_motion_est = None      # online estimator
         self._motion_pool = None           # image_deskew.parallel: worker process running the estimator
         self._motion_futures = deque()     # motions submitted to it, oldest first
+        self._rotvec_history = []          # image_deskew.rotation_smoothing (#046)
         self._image_motions = None         # precomputed (N,4,4), NaN where failed
         # Index in the sequence of the first scan fed to process_scan: the precomputed
         # file has one row per scan of the whole sequence.  SlamPipeline sets it to its
@@ -693,7 +694,32 @@ class KissSLAM:
         if M is None:
             self.n_image_motion_failures += 1
             return np.eye(4)
-        return np.asarray(M, dtype=np.float64)
+        return self._image_motion_parts(np.asarray(M, dtype=np.float64))
+
+    def _image_motion_parts(self, M):
+        """Ablation (#046): which part of the image motion is used, and rotation smoothing.
+
+        rotation_smoothing = k > 1: the rotation is the mean rotation vector of this and the previous
+        k-1 successful image motions (causal).  use_parts: "full" as measured; "translation" keeps the
+        translation with no rotation; "rotation" keeps the rotation with no translation.  The result
+        is used for BOTH the deskew and the ICP initial guess, which must agree (#030).
+        """
+        from scipy.spatial.transform import Rotation
+
+        k = self.image_cfg.rotation_smoothing
+        if k > 1:
+            self._rotvec_history.append(Rotation.from_matrix(M[:3, :3]).as_rotvec())
+            del self._rotvec_history[:-k]
+            M = M.copy()
+            M[:3, :3] = Rotation.from_rotvec(np.mean(self._rotvec_history, axis=0)).as_matrix()
+        parts = self.image_cfg.use_parts
+        if parts == "translation":
+            M = M.copy()
+            M[:3, :3] = np.eye(3)
+        elif parts == "rotation":
+            M = M.copy()
+            M[:3, 3] = 0.0
+        return M
 
     @property
     def image_motion_parallel(self):

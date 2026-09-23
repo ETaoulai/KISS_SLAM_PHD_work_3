@@ -3,6 +3,7 @@
 
     python scripts/run_ncd.py <arm> <sequence> <out dir> [n_scans] [--config=<yaml>] [--seed=N] [--parallel]
                               [--topic=/os_cloud_node/points] [--intensity-scale=0.249] [--diag]
+                              [--parts=full|translation|rotation] [--rot-smooth=k]
 
 sequence: a 2020 sequence dir with raw_format/ouster_scan/*.pcd (kiss_slam/tools/ncd_pcd.py), or a
           .bag file, or a folder whose *.bag are ONE split sequence (read in time order; 2021 bags).
@@ -14,6 +15,7 @@ the KISS-SLAM paper); only image_deskew.enabled / detector differ.  --seed: RANS
 image-motion estimator, for measuring run-to-run spread (#037).  --parallel: the image motion in a
 worker process, overlapping the ICP (image_deskew.parallel); same trajectory, less time per scan.
 --intensity-scale: image_deskew.intensity_scale, default 255/1024 for the Ouster signal (#041).
+--parts / --rot-smooth: ablation of the image motion (image_deskew.use_parts / rotation_smoothing, #046).
 --diag: per-scan ICP diagnostics (a KD-tree over the local map per scan; off by default here, it
 does not change the trajectory).  For bags the written timestamps are the scans' header stamps
 (the loader's own are the bag record times), so the evaluation matches them to the ground truth.
@@ -51,6 +53,8 @@ def main():
         config.image_deskew.parallel = "--parallel" in sys.argv
         config.image_deskew.intensity_scale = float(opts.get("intensity-scale", 255.0 / 1024.0))
         config.diagnostics.icp_metrics = "--diag" in sys.argv
+        config.image_deskew.use_parts = opts.get("parts", "full")
+        config.image_deskew.rotation_smoothing = int(opts.get("rot-smooth", 1))
         return config
 
     pipeline.load_config = load_with_overrides
