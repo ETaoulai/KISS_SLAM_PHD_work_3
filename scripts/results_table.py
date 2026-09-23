@@ -35,7 +35,8 @@ for n in (2, 3):
                       ROOT / f"oxford_spires/2024-03-18-christ-church-0{n}/ground_truth/gt-tum_church_{n}.txt", "spires",
                       RUNS / "oxford_spires_full" / f"church_0{n}"))
 
-ARMS = {"kiss": "KISS-SLAM", "sift": "i3 + SIFT", "surf": "i3 + SURF"}
+ARMS = {"kissnodeskew": "KISS-SLAM, no deskew", "kissdetail": "KISS-SLAM, indoor_detail", "kiss": "KISS-SLAM",
+        "sift": "i3 + SIFT", "surf": "i3 + SURF"}
 METRICS = [("ate", "ATE [m]", "{:.3f}"), ("rpe_t", "RPE 1 s [cm]", "{:.2f}"), ("rpe_r", "RPE 1 s [°]", "{:.3f}"),
            ("path", "path [m]", "{:.1f}"), ("excess", "path vs GT [%]", "{:+.1f}"), ("z_rmse", "z RMSE [m]", "{:.3f}"),
            ("kitti", "KITTI [%]", "{:.2f}"), ("fail", "image fails", "{:.0f}")]
@@ -78,7 +79,9 @@ def main():
         return s + (" ± " + f.replace("+", "").format(sd) if not np.isnan(sd) and sd > 1e-9 else "")
 
     lines = ["# Results against the ground truth", "",
-             "KISS-SLAM default config (the setting of the KISS-SLAM paper); mean ± σ over the runs of each arm "
+             "KISS-SLAM default config (the setting of the KISS-SLAM paper), except the arms \"KISS-SLAM, indoor_detail\" "
+             "(configs/indoor_detail.yaml: voxel 0.25 m, max range 50 m, local maps 15 m) and \"KISS-SLAM, no deskew\" "
+             "(configs/kiss_paper_nodeskew.yaml: paper config, deskew off).  Mean ± σ over the runs of each arm "
              "(KISS-SLAM is deterministic: its runs are identical).  ATE: RMSE after a rigid alignment.  RPE over 1 s.  "
              "KITTI: relative translation error over 100-800 m segments (undefined below 100 m).  "
              "*Best value per sequence in bold* (lower is better; path: closest to the GT).  "

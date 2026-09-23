@@ -1,0 +1,9 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# KISS-SLAM defaults (the setting of the KISS-SLAM paper) with the deskew switched OFF:
+# every scan is registered as if measured at one instant.  Baseline for "how much of
+# the gain is deskew at all" (#012: on church_02 no deskew beat the KISS guess).  #045.
+# ─────────────────────────────────────────────────────────────────────────────
+
+odometry:
+    preprocessing:
+        deskew: false
