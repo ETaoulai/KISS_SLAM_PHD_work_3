@@ -56,8 +56,12 @@ def load_gt(path, frame):
     if "," in first:                                                    # #sec,nsec,x,y,z,qx,qy,qz,qw
         g = np.genfromtxt(path, delimiter=",", comments="#")
         t, T = g[:, 0] + g[:, 1] * 1e-9, np.array([se3(r[2:5], r[5:9]) for r in g])
-    else:                                                               # TUM
-        t, T = load_tum(path)
+    else:                                                               # TUM, 8 columns
+        d = np.loadtxt(path, comments="#")
+        if d.shape[1] == 9:     # "sec nsec x y z qx qy qz qw" (2021 underground mine "tum_format")
+            t, T = d[:, 0] + d[:, 1] * 1e-9, np.array([se3(r[2:5], r[5:9]) for r in d])
+        else:
+            t, T = load_tum(path)
     frame = frame or "none"
     T = base_to_lidar(T) if frame == "spires" else T @ FRAMES[frame]
     return t, T, frame
