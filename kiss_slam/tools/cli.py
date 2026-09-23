@@ -156,6 +156,17 @@ def kiss_slam(
         ),
         rich_help_panel="Additional Options",
     ),
+    image_detector: Optional[str] = typer.Option(
+        None,
+        "--image-detector",
+        show_default=False,
+        help=(
+            "[Optional] Only with --image-deskew (online): features matched between the "
+            "intensity panoramas, 'sift' or 'surf'. SURF needs OpenCV built with "
+            "OPENCV_ENABLE_NONFREE=ON. Overrides image_deskew.detector (default: sift)."
+        ),
+        rich_help_panel="Additional Options",
+    ),
     config: Optional[Path] = typer.Option(
         None,
         "--config",
@@ -204,6 +215,7 @@ def kiss_slam(
         intensity_mode=intensity_mode,
         image_deskew=image_deskew,
         motion_file=str(motion_file) if motion_file is not None else None,
+        image_detector=image_detector,
     ).run().print()
 
 

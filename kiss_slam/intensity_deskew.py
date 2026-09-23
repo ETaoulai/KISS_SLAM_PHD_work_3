@@ -273,11 +273,36 @@ def fit_time(p, tp, q, tq, M0, model="cv"):
     return M, keep
 
 
-def features(xyz, ts, inten, ring, sift):
-    """Panorama + SIFT of one raw scan: (P, T, valid, keypoints, descriptors)."""
+def make_detector(detector="sift", surf_hessian=100.0, surf_upright=False):
+    """Feature detector + descriptor for the panorama: "sift" (default) or "surf".
+
+    Both give float descriptors, so the same L2 matcher and ratio test serve both.  SURF is
+    patented and lives in opencv-contrib's xfeatures2d, which only has it in a build with
+    OPENCV_ENABLE_NONFREE=ON; the pip wheels (opencv-python, opencv-contrib-python) do not.
+    `surf_hessian`: Hessian threshold, higher = fewer, stronger keypoints (OpenCV default 100).
+    `surf_upright`: skip the orientation (U-SURF); the panorama is never rotated in-plane.
+    """
+    if detector == "sift":
+        return cv2.SIFT_create()
+    if detector == "surf":
+        try:
+            return cv2.xfeatures2d.SURF_create(hessianThreshold=surf_hessian, upright=surf_upright)
+        except (AttributeError, cv2.error) as e:
+            raise RuntimeError(
+                "image_deskew.detector = 'surf' needs OpenCV with contrib and OPENCV_ENABLE_NONFREE=ON; "
+                f"this cv2 ({cv2.__version__}) has no SURF.  Build it with:  ENABLE_CONTRIB=1 ENABLE_HEADLESS=1 "
+                'CMAKE_ARGS="-DOPENCV_ENABLE_NONFREE=ON" pip install --no-binary opencv-contrib-python-headless '
+                "opencv-contrib-python-headless  (after uninstalling opencv-python)"
+            ) from e
+    raise ValueError(f"unknown detector {detector!r}: 'sift' or 'surf'")
+
+
+def features(xyz, ts, inten, ring, detector):
+    """Panorama + keypoints/descriptors (SIFT or SURF, see make_detector) of one raw scan:
+    (P, T, valid, keypoints, descriptors, t_start)."""
     ok = ~np.isnan(xyz).any(axis=1) & (np.linalg.norm(xyz, axis=1) > MIN_RANGE)
     big, P, T, valid = panorama(xyz[ok], ts[ok], inten[ok], ring[ok])
-    kps, desc = sift.detectAndCompute(big, None)
+    kps, desc = detector.detectAndCompute(big, None)
     return P, T, valid, kps, desc, ts[ok].min()
 
 
@@ -388,19 +413,22 @@ class ScanMotionEstimator:
     """Online: feed raw scans in order, get each scan's motion from it and the previous one."""
 
     def __init__(self, period=0.1, seed=0, model="cv", subpixel=False,
-                 stuck_min=_DEFAULT, floor_only=_DEFAULT, elev=_DEFAULT, range_=_DEFAULT):
+                 stuck_min=_DEFAULT, floor_only=_DEFAULT, elev=_DEFAULT, range_=_DEFAULT,
+                 detector="sift", surf_hessian=100.0, surf_upright=False):
         """`stuck_min`, `floor_only`, `elev`, `range_`: the stuck-match filter (#025-#027);
-        left at their defaults they read the module globals STUCK_* at each call."""
+        left at their defaults they read the module globals STUCK_* at each call.
+        `detector`, `surf_hessian`, `surf_upright`: the panorama features, see make_detector."""
         self.period, self.model, self.subpixel = period, model, subpixel
         self.stuck_min, self.floor_only, self.elev, self.range_ = stuck_min, floor_only, elev, range_
-        self.sift = cv2.SIFT_create()
+        self.detector_name = detector
+        self.detector = make_detector(detector, surf_hessian, surf_upright)
         self.bf = cv2.BFMatcher(cv2.NORM_L2)
         self.rng = np.random.default_rng(seed)
         self.prev = None
         self.ratios = []; self.last_factor = 1.0
 
     def motion(self, xyz, ts, inten, ring):
-        cur = features(xyz, ts, inten, ring, self.sift)
+        cur = features(xyz, ts, inten, ring, self.detector)
         prev, self.prev = self.prev, cur
         self.last_params, self.last_t_start = None, cur[5]
         if prev is None:

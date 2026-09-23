@@ -353,6 +353,9 @@ class KissSLAM:
                     floor_only=self.image_cfg.stuck_floor_only,
                     elev=self.image_cfg.stuck_elev_deg,
                     range_=self.image_cfg.stuck_range_m,
+                    detector=self.image_cfg.detector,
+                    surf_hessian=self.image_cfg.surf_hessian_threshold,
+                    surf_upright=self.image_cfg.surf_upright,
                 )
 
         # Diagnostics-only KDTree cache (never affects the trajectory).

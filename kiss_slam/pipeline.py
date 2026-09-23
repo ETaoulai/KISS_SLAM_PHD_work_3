@@ -83,6 +83,7 @@ class SlamPipeline(OdometryPipeline):
         intensity_mode: Optional[str] = None,
         image_deskew: Optional[bool] = None,
         motion_file: Optional[str] = None,
+        image_detector: Optional[str] = None,
     ):
         super().__init__(dataset=dataset, config=None, n_scans=n_scans, jump=jump)
         self.slam_config = load_config(config_file)
@@ -95,6 +96,11 @@ class SlamPipeline(OdometryPipeline):
             self.slam_config.image_deskew.enabled = image_deskew
         if motion_file is not None:
             self.slam_config.image_deskew.motion_file = str(motion_file)
+        if image_detector is not None:
+            # Plain attribute assignment skips the config's Literal check, so check here.
+            if image_detector not in ("sift", "surf"):
+                raise ValueError(f"--image-detector must be 'sift' or 'surf', not {image_detector!r}")
+            self.slam_config.image_deskew.detector = image_detector
         self.use_intensity = self.slam_config.intensity.enabled
         self.use_image_deskew = self.slam_config.image_deskew.enabled
         # Online image deskew needs the raw scan (intensity on the sensor scale + ring).
@@ -110,7 +116,7 @@ class SlamPipeline(OdometryPipeline):
                      f"{' floor-only' if img.stuck_min is not None and img.stuck_floor_only else ''}"
                      f"{', + ICP initial guess' if img.use_as_initial_guess else ''}"
                      f", sigma {'fixed ' + format(img.fixed_sigma, 'g') if img.fixed_sigma is not None else 'adaptive'}"
-                     f", motion {'online' if img.motion_file is None else img.motion_file})"
+                     f", motion {'online, ' + img.detector.upper() if img.motion_file is None else img.motion_file})"
                 if self.use_image_deskew
                 else "BASELINE (vanilla KISS-SLAM)"
             )

@@ -17,6 +17,8 @@ online. Δεν χρησιμοποιεί GT· το GT διαβάζεται μόν
     --render=raycast: η εικόνα με ακτίνα ανά pixel αντί για «κάθε σημείο στο πλησιέστερο pixel»· κατάληξη _ray (#034)
     --mask=<npz> --mask-key=narrow|edges|union: εξαίρεση χαρακτηριστικών σε pixel καρφωμένα στον σαρωτή (#036)
     --seed=N: σπόρος του RANSAC· άλλος σπόρος = ανεξάρτητο run, για μέτρηση διασποράς· κατάληξη _seed<N> (#037)
+    --detector=surf: SURF αντί για SIFT στα πανοράματα (θέλει OpenCV με OPENCV_ENABLE_NONFREE)· κατάληξη _surf
+    --surf-hessian=H --surf-upright: κατώφλι Hessian (default 100) / χωρίς προσανατολισμό (U-SURF)· κατάληξη _h<H> / _up
 """
 import sys
 import time
@@ -44,10 +46,13 @@ _s = lambda key, default: next((a.split("=", 1)[1] for a in sys.argv[1:] if a.st
 MASK, MASK_KEY = _s("mask", None), _s("mask-key", "mask")     # npz με μάσκα pixel καρφωμένων στον σαρωτή (#035)
 TRANS = _arg("trans-min")                                     # ελάχιστη απόσταση αντιστοίχισης για τη ΜΕΤΑΤΟΠΙΣΗ (#039)
 SEED = int(_s("seed", "0"))                                   # σπόρος του RANSAC· άλλος σπόρος = άλλο run για μέτρηση διασποράς (#037)
+DETECTOR = _s("detector", "sift")                             # χαρακτηριστικά των πανοραμάτων: sift | surf
+SURF_HESSIAN, SURF_UPRIGHT = float(_s("surf-hessian", "100")), "--surf-upright" in sys.argv
 BAG, GT, STAMPS = _s("bag", "data/church_02_cut.bag"), _s("gt", "gt/church_02_gt-tum.txt"), _s("run", "runs/indoor_detail_base_overlapfix")
 PREFIX = "" if BAG == "data/church_02_cut.bag" else Path(BAG).stem + "_"
 OUT = Path(f"runs/{PREFIX}i3_motion" + ("" if MODEL == "cv" else f"_{MODEL}") + ("_sp" if SUBPIXEL else "")
-           + (f"_r{RANSAC:g}_f{FIT:g}" if RANSAC else "") + (f"_st{STUCK:g}" if STUCK else "") + ("_floor" if FLOOR else "") + ("_ray" if RENDER == "raycast" else "") + (f"_mask-{MASK_KEY}" if MASK else "") + (f"_tr{TRANS:g}" if TRANS else "") + ("_mag" if TRANS and _s("trans-mode","vector")=="magnitude" else "") + (f"_f{_s('trans-factor','1.0')}" if _s("trans-factor","1.0")!="1.0" else "") + (f"_seed{SEED}" if SEED else "") + ".npz")
+           + (f"_r{RANSAC:g}_f{FIT:g}" if RANSAC else "") + (f"_st{STUCK:g}" if STUCK else "") + ("_floor" if FLOOR else "") + ("_ray" if RENDER == "raycast" else "") + (f"_mask-{MASK_KEY}" if MASK else "") + (f"_tr{TRANS:g}" if TRANS else "") + ("_mag" if TRANS and _s("trans-mode","vector")=="magnitude" else "") + (f"_f{_s('trans-factor','1.0')}" if _s("trans-factor","1.0")!="1.0" else "") + (f"_seed{SEED}" if SEED else "")
+           + ("_surf" + (f"_h{SURF_HESSIAN:g}" if SURF_HESSIAN != 100 else "") + ("_up" if SURF_UPRIGHT else "") if DETECTOR == "surf" else "") + ".npz")
 
 
 def read_raw(msg):
@@ -71,7 +76,8 @@ def main():
     if MASK:
         _z = np.load(MASK); I.PIXEL_MASK = _z[MASK_KEY].astype(bool)
         print(f"μάσκα pixel «{MASK_KEY}» από {MASK}: {int(I.PIXEL_MASK.sum())} pixel ({100*I.PIXEL_MASK.mean():.2f} %)")
-    est = ScanMotionEstimator(model=MODEL, subpixel=SUBPIXEL, seed=SEED)
+    est = ScanMotionEstimator(model=MODEL, subpixel=SUBPIXEL, seed=SEED,
+                              detector=DETECTOR, surf_hessian=SURF_HESSIAN, surf_upright=SURF_UPRIGHT)
     N = len(ds)
     motion = np.full((N, 4, 4), np.nan); inliers = np.zeros(N, int)
     params = np.full((N, 12), np.nan); t_start = np.full(N, np.nan)      # η καμπύλη κίνησης, για deskew_curve (#033)
@@ -105,7 +111,7 @@ def main():
     tg = np.array([(inv(G[k - 1]) @ G[k])[:3, 3] for k in range(1, N) if ok[k]])
     ti = np.array([motion[k][:3, 3] for k in range(1, N) if ok[k]])
     scale = np.median(np.sum(ti * tg, 1) / np.maximum(np.sum(tg * tg, 1), 1e-9))
-    print(f"[{MODEL}{' +subpixel' if SUBPIXEL else ''}{f' ransac {RANSAC} fit {FIT}' if RANSAC else ''}{f' stuck {STUCK}' if STUCK else ''}{' floor-only' if FLOOR else ''}{' raycast' if RENDER == 'raycast' else ''}] κλίμακα μετατόπισης {scale:.3f} · σφάλμα έναντι GT: στροφή διάμεσος {np.median(e):.2f}°, 90ό εκατ. {np.percentile(e, 90):.2f}° · "
+    print(f"[{MODEL}{' +subpixel' if SUBPIXEL else ''}{f' ransac {RANSAC} fit {FIT}' if RANSAC else ''}{f' stuck {STUCK}' if STUCK else ''}{' floor-only' if FLOOR else ''}{' raycast' if RENDER == 'raycast' else ''}{' ' + DETECTOR.upper() if DETECTOR != 'sift' else ''}] κλίμακα μετατόπισης {scale:.3f} · σφάλμα έναντι GT: στροφή διάμεσος {np.median(e):.2f}°, 90ό εκατ. {np.percentile(e, 90):.2f}° · "
           f"θέση διάμεσος {np.median(et):.0f} mm · "
           f"(μέγεθος της κίνησης: διάμεσος {np.median(z):.2f}°)")
 

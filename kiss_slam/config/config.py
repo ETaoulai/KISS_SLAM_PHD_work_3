@@ -113,9 +113,9 @@ class IntensityConfig(BaseModel):
 class ImageDeskewConfig(BaseModel):
     """Deskew and ICP initial guess from the motion measured in the intensity image (#018-#032).
 
-    For each scan the motion during the sweep is estimated from SIFT matches between the
-    intensity panoramas of the previous and the current raw scan, each pixel carrying its
-    own 3D point and time (`kiss_slam.intensity_deskew.ScanMotionEstimator`).  This motion
+    For each scan the motion during the sweep is estimated from SIFT (or SURF, `detector`)
+    matches between the intensity panoramas of the previous and the current raw scan, each
+    pixel carrying its own 3D point and time (`kiss_slam.intensity_deskew.ScanMotionEstimator`).  This motion
     replaces KISS's constant-velocity guess `last_delta` BOTH for deskewing the scan AND as
     the ICP initial guess (`last_pose @ M`): the two must agree, otherwise the start drifts
     (#030).  The adaptive threshold sigma is kept fixed (#031: with a good initial guess the
@@ -134,6 +134,13 @@ class ImageDeskewConfig(BaseModel):
     model: Literal["cv", "car", "ca"] = "car"
     # Bilinear interpolation of point and time inside the pixel (#021).
     subpixel: bool = True
+    # Features matched between the two panoramas: "sift" (every result so far) or "surf".
+    # SURF needs OpenCV built with contrib + OPENCV_ENABLE_NONFREE=ON (not in the pip wheels).
+    # surf_hessian_threshold: higher = fewer, stronger keypoints (OpenCV default 100).
+    # surf_upright: no keypoint orientation (U-SURF); the panorama is never rotated in-plane.
+    detector: Literal["sift", "surf"] = "sift"
+    surf_hessian_threshold: float = 100.0
+    surf_upright: bool = False
     # Drop matches that are the same point in the sensor frame, |p - q| < stuck_min (m):
     # intensity patterns travelling with the sensor (#025-#026).  None = keep all.
     stuck_min: Optional[float] = 0.05
