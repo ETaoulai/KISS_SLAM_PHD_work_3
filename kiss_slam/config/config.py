@@ -1,0 +1,280 @@
+# MIT License
+
+# Copyright (c) 2025 Tiziano Guadagnino, Benedikt Mersch, Saurabh Gupta, Cyrill
+# Stachniss.
+
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
+
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Any, Dict, Literal, Optional
+
+import yaml
+from kiss_icp.config.config import (
+    AdaptiveThresholdConfig,
+    DataConfig,
+    MappingConfig,
+    RegistrationConfig,
+)
+from kiss_icp.config.parser import KISSConfig
+from map_closures.config.config import MapClosuresConfig
+from pydantic import BaseModel
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class KissOdometryConfig(BaseModel):
+    preprocessing: DataConfig = DataConfig()
+    registration: RegistrationConfig = RegistrationConfig()
+    mapping: MappingConfig = MappingConfig()
+    adaptive_threshold: AdaptiveThresholdConfig = AdaptiveThresholdConfig()
+
+
+class LoopCloserConfig(BaseModel):
+    detector: MapClosuresConfig = MapClosuresConfig()
+    overlap_threshold: float = 0.4
+    # How many detector candidates to verify with ICP, best (most inliers) first,
+    # stopping at the first accepted one.  1 = upstream (only the best candidate).
+    top_k: int = 1
+    # Reject a closure whose height difference between the two maps disagrees with the
+    # odometry's by more than this (m), measured along the vertical of the query map
+    # (MapClosures ground plane).  The density maps carry no height, so a floor can be
+    # matched to a stair map above or below it (#015: two such closures, 2.3 m off,
+    # passed ICP and the overlap check).  None = upstream (no check).
+    max_height_disagreement: Optional[float] = None
+
+
+class DeskewRefineConfig(BaseModel):
+    """Deskew each scan again with its OWN estimated motion, then register again.
+
+    KISS deskews a scan with the motion of the PREVIOUS scan (constant velocity).  For a
+    handheld unit that sways with every step this is often worse than no deskew at all
+    (church_02: ATE 0.339 vs 0.283 m), while deskewing with the true motion of the scan
+    gives 0.101 m (#012).  Each extra pass: deskew the raw scan with
+    inv(last_pose) @ current estimate, then ICP again, warm-started from that estimate.
+
+    passes = 1 is upstream KISS.  Only used when `odometry.preprocessing.deskew` is true
+    and the intensity arm is off.
+    """
+
+    passes: int = 1
+
+
+class LocalMapperConfig(BaseModel):
+    voxel_size: float = 0.5
+    splitting_distance: float = 100.0
+    # Also start a new local map once the height changes by more than this (m) since
+    # the map began, so a map does not span two floors.  None = upstream (distance only).
+    # Height is the z of the pose in the node frame, i.e. the sensor frame at the node
+    # start; for a roughly level handheld unit that is close to the vertical.
+    splitting_height: Optional[float] = None
+
+
+class IntensityConfig(BaseModel):
+    """Controls the intensity-aided ICP experiment.
+
+    `enabled = False` reproduces vanilla upstream KISS-SLAM exactly and is the
+    A/B *baseline* arm.  Set it to True for the intensity arm.  Keeping this in
+    the config (rather than a hardcoded constant) means the value is written to
+    `slam_config.yaml` in the results dir, so every run records which arm it was.
+    """
+
+    enabled: bool = False
+    # How the intensity-selected points reach the ICP:
+    #   "refine"  – the original method: standard KISS ICP on all points, then a
+    #               second ICP on the selected points, warm-started from the first
+    #               result, against a map that ALREADY contains this scan.
+    #   "replace" – a single ICP on the selected points only, before the scan is
+    #               added to the map (the map still receives every point).  Tests
+    #               the selection on its own, without the first ICP's answer.
+    mode: Literal["refine", "replace"] = "refine"
+    # Source filtering (odometry)
+    keep_ratio: float = 0.70
+    min_intensity: float = 0.05
+    # Loop-closure ColoredICP: 1.0 = pure geometry, 0.0 = pure photometry
+    lambda_geometric: float = 0.90
+
+
+class ImageDeskewConfig(BaseModel):
+    """Deskew and ICP initial guess from the motion measured in the intensity image (#018-#032).
+
+    For each scan the motion during the sweep is estimated from SIFT matches between the
+    intensity panoramas of the previous and the current raw scan, each pixel carrying its
+    own 3D point and time (`kiss_slam.intensity_deskew.ScanMotionEstimator`).  This motion
+    replaces KISS's constant-velocity guess `last_delta` BOTH for deskewing the scan AND as
+    the ICP initial guess (`last_pose @ M`): the two must agree, otherwise the start drifts
+    (#030).  The adaptive threshold sigma is kept fixed (#031: with a good initial guess the
+    KISS sigma collapses 2.4 -> 0.6 and the ICP corrects too little).  When the estimate
+    fails the scan is not deskewed (identity), which beats the KISS guess (#012).
+
+    church_02 0.130 m (KISS 0.319), christ-church-03 0.038 (0.122), keble-college-02 0.094
+    (2.133), one setting for all (#031-#032).  This is the config-driven form of
+    `scripts/precompute_i3_motion.py --model=car --subpixel --stuck=0.05 --floor-only` +
+    `scripts/run_i3_deskew.py ... 0 init fixed`.  Mutually exclusive with `intensity.enabled`.
+    """
+
+    enabled: bool = False
+    # Motion model over the two scans: constant velocity, acceleration in rotation only
+    # (#021, default), constant acceleration in rotation and translation (#020).
+    model: Literal["cv", "car", "ca"] = "car"
+    # Bilinear interpolation of point and time inside the pixel (#021).
+    subpixel: bool = True
+    # Drop matches that are the same point in the sensor frame, |p - q| < stuck_min (m):
+    # intensity patterns travelling with the sensor (#025-#026).  None = keep all.
+    stuck_min: Optional[float] = 0.05
+    # Apply stuck_min only to the near floor (#027): below stuck_elev_deg in the sensor
+    # frame and closer than stuck_range_m.
+    stuck_floor_only: bool = True
+    stuck_elev_deg: float = -10.0
+    stuck_range_m: float = 5.0
+    # Also use the image motion as the ICP initial guess (#030).  False = deskew only.
+    use_as_initial_guess: bool = True
+    # Adaptive threshold: fixed at this value (m) for the whole run (#031).
+    # None = KISS adaptive (updated from the ICP correction of the initial guess).
+    fixed_sigma: Optional[float] = 2.0
+    # Near-field bias of intensity matching (#039): matches closer than ~5 m report only ~74 %
+    # of the true translation, those beyond ~12 m report 100 %, so every translation comes out
+    # 1.5-5 % short.  With trans_min_range set (m), the correction is measured online and
+    # causally: per scan the ratio of the translation its matches beyond that range imply to the
+    # one all its matches imply, then the running median of the PREVIOUS scans (window in
+    # intensity_deskew.TRANS_AUTO_WINDOW) multiplies the translation.  No ground truth, and it
+    # follows the scene.  None = off.  trans_mode: "auto" (running median), "magnitude" or
+    # "vector" (per-scan, noisier; see #039).
+    trans_min_range: Optional[float] = None
+    trans_mode: str = "auto"
+    # Precomputed motion (.npz with "motion" (N,4,4), NaN where failed) from
+    # scripts/precompute_i3_motion.py, indexed by scan counter.  None = estimate online
+    # from the raw scan (needs intensity and ring per point).
+    motion_file: Optional[str] = None
+
+
+class DiagnosticsConfig(BaseModel):
+    """Per-frame ICP residual diagnostics (`icp_*` columns of `icp_metrics.csv`).
+
+    Read-only: nothing here can change the estimated trajectory.  Verified on 400
+    frames of church_02: poses differ from the diagnostics-on run by at most 1.4e-14 m,
+    which is KISS-ICP's own run-to-run noise (two identical runs differ by 1.1e-14 m,
+    from multithreaded reductions in the C++ registration).
+
+    The residual needs a nearest-neighbour index over the whole local map; the KISS
+    voxel map exposes no NN query to Python, so a scipy KDTree is built.
+
+    Measured on `indoor_fast`, 400 frames (ms/frame, and bias of the mean RMS):
+
+        icp_metrics=false            25.7 ms   2.37x faster   residual columns = NaN
+        rebuild_every=1  (default)   60.8 ms   1.00x          exact
+        rebuild_every=2              44.3 ms   1.37x          RMS  +5 %
+        rebuild_every=3              38.7 ms   1.57x          RMS  +9 %
+        rebuild_every=5              34.0 ms   1.79x          RMS +18 %
+        rebuild_every=10             30.8 ms   1.98x          RMS +47 %
+
+    Caching the tree is a poor trade: it buys less speed than switching the residual
+    off, and inflates it because the reused map lacks the most recent frames.  To go
+    fast, set `icp_metrics: false`; the other diagnostics (motion, model deviation,
+    adaptive sigma, geometry) stay on because they are cheap.  Keep `rebuild_every=1`
+    whenever the absolute RMS value matters, and never compare RMS across runs made
+    with different settings.
+
+    The cache is always invalidated when a new local-map node is created, because the
+    map is re-expressed in the new node's frame at that point.
+    """
+
+    icp_metrics: bool = True
+    rebuild_every: int = 1
+
+
+class OccupancyMapperConfig(BaseModel):
+    free_threshold: float = 0.2
+    occupied_threshold: float = 0.65
+    resolution: float = 0.5
+    max_range: Optional[float] = None
+    z_min: float = 0.1
+    z_max: float = 0.5
+
+
+class PoseGraphOptimizerConfig(BaseModel):
+    max_iterations: int = 10
+
+
+class KissSLAMConfig(BaseSettings):
+    model_config = SettingsConfigDict(env_prefix="kiss_slam_")
+    out_dir: str = "slam_output"
+    odometry: KissOdometryConfig = KissOdometryConfig()
+    deskew_refine: DeskewRefineConfig = DeskewRefineConfig()
+    local_mapper: LocalMapperConfig = LocalMapperConfig()
+    intensity: IntensityConfig = IntensityConfig()
+    image_deskew: ImageDeskewConfig = ImageDeskewConfig()
+    diagnostics: DiagnosticsConfig = DiagnosticsConfig()
+    occupancy_mapper: OccupancyMapperConfig = OccupancyMapperConfig()
+    loop_closer: LoopCloserConfig = LoopCloserConfig()
+    pose_graph_optimizer: PoseGraphOptimizerConfig = PoseGraphOptimizerConfig()
+
+    def kiss_icp_config(self) -> KISSConfig:
+        return KISSConfig(
+            out_dir=self.out_dir,
+            data=self.odometry.preprocessing,
+            registration=self.odometry.registration,
+            mapping=self.odometry.mapping,
+            adaptive_threshold=self.odometry.adaptive_threshold,
+        )
+
+
+class KissDumper(yaml.Dumper):
+    # HACK: insert blank lines between top-level objects
+    # inspired by https://stackoverflow.com/a/44284819/3786245
+    def write_line_break(self, data=None):
+        super().write_line_break(data)
+
+        if len(self.indents) == 1:
+            super().write_line_break()
+
+
+def _yaml_source(config_file: Optional[Path]) -> Dict[str, Any]:
+    data = None
+    if config_file is not None:
+        with open(config_file) as cfg_file:
+            data = yaml.safe_load(cfg_file)
+    return data or {}
+
+
+def load_config(config_file: Optional[Path]) -> KissSLAMConfig:
+    """Load configuration from an Optional yaml file. Additionally, deskew and max_range can be
+    also specified from the CLI interface"""
+
+    config = KissSLAMConfig(**_yaml_source(config_file))
+
+    # Use specified voxel size or compute one using the max range
+    if config.odometry.mapping.voxel_size is None:
+        config.odometry.mapping.voxel_size = float(config.odometry.preprocessing.max_range / 100.0)
+
+    if config.occupancy_mapper.max_range is None:
+        config.occupancy_mapper.max_range = config.odometry.preprocessing.max_range
+
+    return config
+
+
+def write_config(config: KissSLAMConfig = KissSLAMConfig(), filename: str = "kiss_slam.yaml"):
+    with open(filename, "w") as outfile:
+        yaml.dump(
+            config.model_dump(),
+            outfile,
+            Dumper=KissDumper,
+            default_flow_style=False,
+            sort_keys=False,
+            indent=4,
+        )

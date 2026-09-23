@@ -1,0 +1,820 @@
+# MIT License
+
+# Copyright (c) 2025 Tiziano Guadagnino, Benedikt Mersch, Saurabh Gupta, Cyrill
+# Stachniss.
+
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
+
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
+import numpy as np
+import open3d as o3d
+from kiss_icp.kiss_icp import KissICP
+from kiss_icp.preprocess import Preprocessor
+from kiss_icp.voxelization import voxel_down_sample
+from scipy.spatial import KDTree
+
+from kiss_slam.config import KissSLAMConfig
+from kiss_slam.local_map_graph import LocalMapGraph
+from kiss_slam.loop_closer import LoopCloser
+from kiss_slam.pose_graph_optimizer import PoseGraphOptimizer
+from kiss_slam.voxel_map import VoxelMap
+
+
+def transform_points(pcd, T):
+    R = T[:3, :3]
+    t = T[:3, -1]
+    return pcd @ R.T + t
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Intensity helpers
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _interpolate_intensity(raw_frame: np.ndarray,
+                           raw_intensity: np.ndarray,
+                           downsampled: np.ndarray) -> np.ndarray:
+    """Assign each downsampled point the intensity of its nearest raw neighbour.
+
+    Parameters
+    ----------
+    raw_frame   : (N, 3) original (deskewed) XYZ frame
+    raw_intensity : (N,) normalised [0,1] intensity for every raw point
+    downsampled : (M, 3) voxelised subset of the frame
+
+    Returns
+    -------
+    (M,) float32 intensity values for the downsampled points
+    """
+    if raw_intensity is None or len(raw_intensity) == 0:
+        return None
+    tree = KDTree(raw_frame)
+    _, idx = tree.query(downsampled, k=1, workers=-1)
+    return raw_intensity[idx].astype(np.float32)
+
+
+def _align_intensity_to_preprocessed(deskewed_all: np.ndarray,
+                                     raw_intensity: np.ndarray,
+                                     preprocessed: np.ndarray,
+                                     max_range: float,
+                                     min_range: float):
+    """Drop the intensities of the points the KISS preprocessor dropped.
+
+    `raw_intensity[i]` belongs to raw point i.  The KISS preprocessor first
+    deskews every point, then removes those whose *deskewed* range falls outside
+    [min_range, max_range], keeping the rest **in order**.  Indexing
+    `raw_intensity` with positions in `preprocessed` (what the code did before)
+    shifts every intensity after the first dropped point onto a different point.
+    Measured on church_02: only 7.8-14.1 % of source points had their own
+    intensity in outdoor scans with any point beyond 50 m.
+
+    `deskewed_all` must be the raw frame put through the *same* deskew but with
+    no range limit, so that deskewed_all[i] is raw point i.  Masking on the raw
+    range instead is not exact: deskewing moves points across the limit
+    (6 points in scan 450).
+
+    Returns (aligned_intensity, used_fallback).  The fallback (nearest point of
+    deskewed_all, which contains every surviving point exactly) only exists as a
+    safety net in case the preprocessor's range test ever differs from ours.
+    """
+    if raw_intensity is None or len(raw_intensity) == 0:
+        return raw_intensity, False
+    rng = np.linalg.norm(deskewed_all, axis=1)
+    # Ίδιες αυστηρές ανισότητες με το KISS (Preprocessing.cpp: range < max && range > min).
+    keep = (rng < max_range) & (rng > min_range)
+    if int(keep.sum()) == len(preprocessed):
+        return raw_intensity[keep], False
+    _, idx = KDTree(deskewed_all).query(preprocessed, k=1, workers=-1)
+    return raw_intensity[idx], True
+
+
+def _intensity_filter(points: np.ndarray,
+                      intensity: np.ndarray,
+                      keep_ratio: float = 0.70,
+                      min_intensity: float = 0.05,
+                      rng: np.random.Generator = None) -> np.ndarray:
+    """Return a boolean mask that keeps the most-informative points.
+
+    Strategy
+    --------
+    On geometrically degenerate surfaces (staircase treads, flat corridors)
+    most LiDAR returns have *similar, low* intensity – they all came from the
+    same homogeneous material and provide near-duplicate constraints for ICP.
+
+    We keep:
+      1. All points above `min_intensity` (bright returns = edges, paint,
+         retro-reflectors, railings) – these are almost always geometrically
+         distinctive.
+      2. Enough of the remaining points to reach `keep_ratio` of the total,
+         sampled randomly so we don't bias toward any region.
+
+    The net effect is that flat-plane dominated frames (high geo_planarity)
+    see fewer redundant co-planar points and more edge/corner returns, which
+    breaks the degeneracy that causes Z-axis and roll/pitch drift.
+
+    Parameters
+    ----------
+    points      : (N, 3) source cloud
+    intensity   : (N,) normalised [0,1] intensities
+    keep_ratio  : overall fraction of points to retain  (default 0.70)
+    min_intensity : points above this value are always kept (default 0.05)
+    rng         : seeded Generator for the random fill-in, so that repeated
+                  runs of the same arm produce identical trajectories
+
+    Returns
+    -------
+    Boolean mask of shape (N,) selecting the retained points
+    """
+    if intensity is None or len(intensity) == 0:
+        return np.ones(len(points), dtype=bool)
+
+    n = len(points)
+    n_keep = max(int(n * keep_ratio), min(50, n))
+
+    bright_mask = intensity >= min_intensity
+    n_bright = int(bright_mask.sum())
+
+    if n_bright >= n_keep:
+        # More bright points than budget: keep the top-n_keep by intensity
+        idx_sorted = np.argsort(intensity)[::-1][:n_keep]
+        mask = np.zeros(n, dtype=bool)
+        mask[idx_sorted] = True
+        return mask
+
+    # Keep all bright points, fill the rest randomly from dim ones
+    mask = bright_mask.copy()
+    still_needed = n_keep - n_bright
+    dim_indices = np.where(~bright_mask)[0]
+    if len(dim_indices) > 0:
+        rng = rng if rng is not None else np.random.default_rng(0)
+        chosen = rng.choice(
+            dim_indices,
+            size=min(still_needed, len(dim_indices)),
+            replace=False,
+        )
+        mask[chosen] = True
+    return mask
+
+
+def _make_intensity_pcd(points: np.ndarray,
+                        intensity: np.ndarray) -> o3d.t.geometry.PointCloud:
+    """Build an Open3D tensor PointCloud with intensity stored as colours.
+
+    Intensity is replicated to R=G=B so that Open3D's ColoredICP can use it.
+    Normals are estimated from the geometry so that PointToPlane also works.
+
+    Parameters
+    ----------
+    points    : (N, 3) float32/64 XYZ
+    intensity : (N,)  float32 normalised [0,1], or None
+
+    Returns
+    -------
+    o3d.t.geometry.PointCloud  (positions + normals + colors if intensity given)
+    """
+    pts32 = points.astype(np.float32)
+    pcd = o3d.t.geometry.PointCloud(o3d.core.Tensor(pts32))
+
+    # Estimate normals (required for ColoredICP and PointToPlane)
+    pcd_legacy = pcd.to_legacy()
+    pcd_legacy.estimate_normals(
+        o3d.geometry.KDTreeSearchParamKNN(knn=20)
+    )
+    pcd_t = o3d.t.geometry.PointCloud.from_legacy(pcd_legacy)
+
+    if intensity is not None and len(intensity) == len(points):
+        intens_f32 = intensity.astype(np.float32).reshape(-1, 1)
+        intens_rgb = np.repeat(intens_f32, 3, axis=1)   # grayscale trick
+        pcd_t.point.colors = o3d.core.Tensor(
+            intens_rgb, dtype=o3d.core.Dtype.Float32
+        )
+
+    return pcd_t
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Diagnostic metric helpers  (unchanged from previous version)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _compute_icp_metrics(source_points, map_tree, pose, max_dist):
+    """Point-to-map residuals of the registered source.
+
+    `map_tree` is a prebuilt KDTree over the local map (see
+    KissSLAM._refresh_diag_tree), or None to skip — building it here every frame
+    was the dominant per-frame cost.
+    """
+    nan = float("nan")
+    empty = {
+        "icp_rms_error": nan, "icp_mean_error": nan, "icp_max_error": nan,
+        "icp_inlier_count": 0, "icp_inlier_ratio": nan,
+    }
+    if map_tree is None or len(source_points) == 0:
+        return empty
+    src_in_map = transform_points(source_points, pose)
+    dists, _ = map_tree.query(src_in_map, k=1, workers=-1)
+    inlier_mask = dists < max_dist
+    inlier_count = int(inlier_mask.sum())
+    n_source = len(source_points)
+    inlier_ratio = inlier_count / n_source if n_source > 0 else nan
+    if inlier_count > 0:
+        d = dists[inlier_mask]
+        rms  = float(np.sqrt(np.mean(d ** 2)))
+        mean = float(np.mean(d))
+        mx   = float(np.max(d))
+    else:
+        rms = mean = mx = nan
+    return {
+        "icp_rms_error":    rms,
+        "icp_mean_error":   mean,
+        "icp_max_error":    mx,
+        "icp_inlier_count": inlier_count,
+        "icp_inlier_ratio": inlier_ratio,
+    }
+
+
+def _compute_motion_metrics(prev_pose, curr_pose):
+    delta = np.linalg.inv(prev_pose) @ curr_pose
+    trans = float(np.linalg.norm(delta[:3, 3]))
+    cos_angle = np.clip((np.trace(delta[:3, :3]) - 1.0) / 2.0, -1.0, 1.0)
+    rot_deg = float(np.degrees(np.arccos(cos_angle)))
+    return {"motion_trans_m": trans, "motion_rot_deg": rot_deg}
+
+
+def _compute_model_deviation(initial_guess, converged_pose):
+    correction = np.linalg.inv(initial_guess) @ converged_pose
+    trans = float(np.linalg.norm(correction[:3, 3]))
+    cos_angle = np.clip((np.trace(correction[:3, :3]) - 1.0) / 2.0, -1.0, 1.0)
+    rot_deg = float(np.degrees(np.arccos(cos_angle)))
+    return {"model_dev_trans_m": trans, "model_dev_rot_deg": rot_deg}
+
+
+def _compute_geometric_degeneracy(source_points):
+    nan = float("nan")
+    bad = {k: nan for k in ("geo_linearity", "geo_planarity", "geo_sphericity",
+                             "geo_condition", "geo_omnivariance")}
+    if len(source_points) < 4:
+        return bad
+    try:
+        cov = np.cov(source_points.T)
+        ev  = np.sort(np.linalg.eigvalsh(cov))
+        l1, l2, l3 = ev
+        eps = 1e-9
+        return {
+            "geo_linearity":    float((l3 - l2) / (l3 + eps)),
+            "geo_planarity":    float((l2 - l1) / (l3 + eps)),
+            "geo_sphericity":   float(l1        / (l3 + eps)),
+            "geo_condition":    float(l3        / (l1 + eps)),
+            "geo_omnivariance": float((max(l1, 0) * max(l2, 0) * max(l3, 0)) ** (1.0 / 3.0)),
+        }
+    except np.linalg.LinAlgError:
+        return bad
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Main SLAM class
+# ─────────────────────────────────────────────────────────────────────────────
+
+class KissSLAM:
+    def __init__(self, config: KissSLAMConfig):
+        self.config = config
+        self.odometry = KissICP(config.kiss_icp_config())
+
+        # ── A/B experiment switch ────────────────────────────────────────────
+        # config.intensity.enabled == False  →  vanilla upstream KISS-SLAM
+        #                                       (the *baseline* arm)
+        # config.intensity.enabled == True   →  intensity-aided arm
+        self.deskew_passes = config.deskew_refine.passes if config.odometry.preprocessing.deskew else 1
+        self.intensity_cfg = config.intensity
+        self.use_intensity = config.intensity.enabled
+        # Same range limits the KISS preprocessor applies, needed to keep each
+        # intensity attached to its own point (see _align_intensity_to_preprocessed).
+        self._max_range = config.odometry.preprocessing.max_range
+        self._min_range = config.odometry.preprocessing.min_range
+        self.n_intensity_fallbacks = 0
+        # Same deskew as KISS but no range cut: row i stays raw point i.
+        self._unbounded_preprocessor = Preprocessor(
+            max_range=1e9,
+            min_range=0.0,
+            deskew=config.odometry.preprocessing.deskew,
+            max_num_threads=config.odometry.registration.max_num_threads,
+        )
+        # Fixed seed: the intensity arm must be reproducible run-to-run,
+        # otherwise an A/B difference cannot be attributed to the method.
+        self._rng = np.random.default_rng(0)
+
+        # ── Image-motion deskew (#018-#032) ─────────────────────────────────
+        # The motion measured in the intensity image replaces last_delta for the
+        # deskew and (use_as_initial_guess) for the ICP start; sigma stays fixed.
+        self.image_cfg = config.image_deskew
+        self.use_image_deskew = config.image_deskew.enabled
+        if self.use_image_deskew and self.use_intensity:
+            raise ValueError(
+                "image_deskew.enabled and intensity.enabled are mutually exclusive: "
+                "pick one arm (--image-deskew or --use-intensity)."
+            )
+        self._image_motion_est = None      # online estimator
+        self._image_motions = None         # precomputed (N,4,4), NaN where failed
+        # Index in the sequence of the first scan fed to process_scan: the precomputed
+        # file has one row per scan of the whole sequence.  SlamPipeline sets it to its
+        # first scan (--jump); without it a run with jump > 0 read the wrong rows.
+        self.first_scan_index = 0
+        self.n_image_motion_failures = 0   # scans that fell back to identity
+        if self.use_image_deskew:
+            if not config.odometry.preprocessing.deskew:
+                raise ValueError("image_deskew.enabled needs odometry.preprocessing.deskew: true")
+            if self.image_cfg.motion_file is not None:
+                self._image_motions = np.load(self.image_cfg.motion_file)["motion"]
+                print(f"KissSLAM| image motion from {self.image_cfg.motion_file} "
+                      f"({len(self._image_motions)} scans)")
+            else:
+                import kiss_slam.intensity_deskew as _idsk
+                from kiss_slam.intensity_deskew import ScanMotionEstimator
+
+                if self.image_cfg.trans_min_range is not None:      # near-field bias correction (#039)
+                    _idsk.TRANS_MIN_RANGE = self.image_cfg.trans_min_range
+                    _idsk.TRANS_MODE = self.image_cfg.trans_mode
+                self._image_motion_est = ScanMotionEstimator(
+                    model=self.image_cfg.model,
+                    subpixel=self.image_cfg.subpixel,
+                    stuck_min=self.image_cfg.stuck_min,
+                    floor_only=self.image_cfg.stuck_floor_only,
+                    elev=self.image_cfg.stuck_elev_deg,
+                    range_=self.image_cfg.stuck_range_m,
+                )
+
+        # Diagnostics-only KDTree cache (never affects the trajectory).
+        self.diag_cfg = config.diagnostics
+        self._diag_tree = None
+        self._diag_map_n = 0
+        self._diag_age = 0
+
+        self.closer = LoopCloser(
+            config.loop_closer,
+            lambda_geometric=config.intensity.lambda_geometric,
+        )
+        local_map_config = self.config.local_mapper
+        self.local_map_voxel_size = local_map_config.voxel_size
+        self.voxel_grid = VoxelMap(self.local_map_voxel_size)
+        self.local_map_graph = LocalMapGraph()
+        self.local_map_splitting_distance = local_map_config.splitting_distance
+        self.local_map_splitting_height = local_map_config.splitting_height
+        # Vertical direction in the current node frame, for splitting_height.  The sensor
+        # is held tilted (5-19 deg on church_02), so the node-frame z is not the height:
+        # over 15 m of level floor it changes 1-3 m (#014).  Taken from the ground plane
+        # MapClosures estimates for the previous local map; unknown for the first node.
+        self._node_up = None
+        self.node_up_log = []   # (node id, up vector in its frame)
+        self.optimizer = PoseGraphOptimizer(config.pose_graph_optimizer)
+        self.optimizer.add_variable(self.local_map_graph.last_id, self.local_map_graph.last_keypose)
+        self.optimizer.fix_variable(self.local_map_graph.last_id)
+        self.closures = []
+
+        # Intensity storage for the current local map's voxel grid.
+        # Maps voxel-grid point index → mean intensity (accumulated online).
+        # When finalize_local_map() is called we write intensities into the
+        # Open3D pcd as colours so that loop-closure ColoredICP can use them.
+        self._intensity_accumulator = {}  # voxel_key → (sum, count)
+        # True only when the experiment is enabled AND the data actually carries
+        # intensity.  Everything downstream keys off this single flag.
+        self._has_intensity = False
+
+        # Diagnostics log
+        self.icp_metrics_log = []
+        self._frame_counter = 0
+        self._prev_pose = np.eye(4)
+
+    def get_closures(self):
+        return self.closures
+
+    def get_keyposes(self):
+        return list(self.local_map_graph.keyposes())
+
+    def process_scan(self, frame: np.ndarray, timestamps: np.ndarray,
+                     intensity: np.ndarray = None, ring: np.ndarray = None):
+        """Process one LiDAR scan.
+
+        Parameters
+        ----------
+        frame      : (N, 3) XYZ points (float64)
+        timestamps : (N,)   per-point timestamps
+        intensity  : (N,)   intensity, or None.  Intensity arm: normalised [0,1].
+                            Image deskew (online): the sensor's raw scale (0-255).
+        ring       : (N,)   laser/ring index per point, or None.  Needed only by the
+                            online image deskew (motion_file = None).
+        """
+        use_int = self.use_intensity and intensity is not None
+        mode = self.intensity_cfg.mode
+
+        # ── 1. Capture pre-registration state ────────────────────────────────
+        # Refreshed *before* registration so the residual never includes the
+        # current frame's own points.
+        if self.diag_cfg.icp_metrics:
+            self._refresh_diag_tree()
+        sigma = self.odometry.adaptive_threshold.get_threshold()
+        # Used by the "refine" branch below exactly as in the original method.
+        initial_guess = np.copy(self.odometry.last_pose)
+        # KISS's real initial guess (constant velocity); diagnostics measure the
+        # ICP correction against this.
+        prediction = self.odometry.last_pose @ self.odometry.last_delta
+        # register_frame deskews with last_delta and then overwrites it.
+        deskew_delta = np.copy(self.odometry.last_delta)
+
+        # ── 2. Registration ──────────────────────────────────────────────────
+        if use_int and mode == "replace":
+            (deskewed_frame, source, keep_mask,
+             intensity, source_intensity) = self._register_frame_selected(
+                frame, timestamps, intensity, deskew_delta
+            )
+            current_pose = self.odometry.last_pose
+            source_filtered = source[keep_mask]
+            self._has_intensity = True
+        else:
+            if self.use_image_deskew:
+                deskewed_frame, source = self._register_frame_image_motion(
+                    frame, timestamps, intensity, ring
+                )
+            elif self.deskew_passes > 1 and not use_int:
+                deskewed_frame, source = self._register_frame_deskew_refined(frame, timestamps)
+            else:
+                deskewed_frame, source = self.odometry.register_frame(frame, timestamps)
+            current_pose = self.odometry.last_pose
+            source_filtered = source
+            if use_int:
+                intensity, source_intensity, keep_mask = self._select_by_intensity(
+                    frame, timestamps, intensity, deskew_delta, deskewed_frame, source
+                )
+                self._has_intensity = True
+                source_filtered = source[keep_mask]
+
+                # ── "refine": second ICP on the selected points ──────────────
+                # Warm-started from the first result, against a map that already
+                # contains this scan (kept as in the original method).
+                if len(source_filtered) < len(source):
+                    refined_pose = self.odometry.registration.align_points_to_map(
+                        points=source_filtered,
+                        voxel_map=self.odometry.local_map,
+                        initial_guess=current_pose,
+                        max_correspondance_distance=3.0 * sigma,
+                        kernel=sigma,
+                    )
+                    correction_trans = float(np.linalg.norm((refined_pose - current_pose)[:3, 3]))
+                    if correction_trans < sigma:
+                        current_pose = refined_pose
+                        self.odometry.last_pose = refined_pose
+                        model_deviation = np.linalg.inv(initial_guess) @ refined_pose
+                        self.odometry.adaptive_threshold.update_model_deviation(model_deviation)
+
+        # ── 3. Diagnostics ───────────────────────────────────────────────────
+        m = {"frame_idx": self._frame_counter}
+        m.update(_compute_icp_metrics(
+            source_points=source_filtered,
+            map_tree=self._diag_tree if self.diag_cfg.icp_metrics else None,
+            pose=current_pose,
+            max_dist=3.0 * sigma,
+        ))
+        m["n_source_pts"]    = len(source)
+        m["n_filtered_pts"]  = len(source_filtered)
+        # Size of the map the residual was measured against (may be cached).
+        m["n_map_pts"]       = self._diag_map_n if self.diag_cfg.icp_metrics else 0
+        m["adaptive_sigma"]  = float(sigma)
+        m["has_intensity"]   = self._has_intensity
+        m.update(_compute_motion_metrics(self._prev_pose, current_pose))
+        m.update(_compute_model_deviation(prediction, current_pose))
+        m.update(_compute_geometric_degeneracy(source_filtered))
+        self.icp_metrics_log.append(m)
+        self._frame_counter += 1
+        self._prev_pose = np.copy(current_pose)
+
+        # ── 4. Map integration ───────────────────────────────────────────────
+        mapping_frame = voxel_down_sample(deskewed_frame, self.local_map_voxel_size)
+        self.voxel_grid.integrate_frame(mapping_frame, current_pose)
+
+        # Accumulate intensity for the mapping voxels (used later for ColoredICP)
+        if use_int:
+            self._accumulate_intensity(mapping_frame, current_pose, intensity, deskewed_frame)
+
+        self.local_map_graph.last_local_map.local_trajectory.append(current_pose)
+        traveled_distance = np.linalg.norm(current_pose[:3, -1])
+        if traveled_distance > self.local_map_splitting_distance or (
+            self.local_map_splitting_height is not None
+            and self._node_up is not None
+            and abs(self._node_up @ current_pose[:3, -1]) > self.local_map_splitting_height
+        ):
+            self.generate_new_node()
+
+    def _select_by_intensity(self, frame, timestamps, intensity, deskew_delta,
+                             deskewed_frame, source):
+        """Intensity for every ICP source point, and which of them to keep.
+
+        Returns (intensity aligned to deskewed_frame, per-source intensity,
+        boolean keep mask over `source`).
+        """
+        # The preprocessor dropped out-of-range points; drop their intensities
+        # too so that intensity[i] still belongs to deskewed_frame[i].
+        deskewed_all = self._unbounded_preprocessor.preprocess(frame, timestamps, deskew_delta)
+        aligned, fell_back = _align_intensity_to_preprocessed(
+            deskewed_all, intensity, deskewed_frame, self._max_range, self._min_range
+        )
+        self.n_intensity_fallbacks += int(fell_back)
+
+        source_intensity = _interpolate_intensity(deskewed_frame, aligned, source)
+        keep_mask = _intensity_filter(
+            source,
+            source_intensity,
+            keep_ratio=self.intensity_cfg.keep_ratio,
+            min_intensity=self.intensity_cfg.min_intensity,
+            rng=self._rng,
+        )
+        if keep_mask.sum() < 20:          # safety guard: never starve the ICP
+            keep_mask = np.ones(len(source), dtype=bool)
+        return aligned, source_intensity, keep_mask
+
+    def _register_frame_selected(self, frame, timestamps, intensity, deskew_delta):
+        """KissICP.register_frame with ONE change: the ICP sees only the
+        intensity-selected source points.
+
+        Line-for-line copy of kiss_icp 1.3.0 `KissICP.register_frame` otherwise:
+        same deskew, voxelisation, adaptive threshold, constant-velocity guess,
+        and the map is updated with the FULL downsampled frame.  With a selection
+        that keeps every point it reproduces the baseline trajectory (verified in
+        tests/test_replace_mode.py).
+        """
+        odo = self.odometry
+        # Apply motion compensation
+        deskewed = odo.preprocessor.preprocess(frame, timestamps, odo.last_delta)
+        # Voxelize
+        source, frame_downsample = odo.voxelize(deskewed)
+        # ---- the one change: select the points the ICP will use ----
+        aligned, source_intensity, keep_mask = self._select_by_intensity(
+            frame, timestamps, intensity, deskew_delta, deskewed, source
+        )
+        # Get adaptive_threshold
+        sigma = odo.adaptive_threshold.get_threshold()
+        # Compute initial_guess for ICP
+        initial_guess = odo.last_pose @ odo.last_delta
+        # Run ICP
+        new_pose = odo.registration.align_points_to_map(
+            points=source[keep_mask],
+            voxel_map=odo.local_map,
+            initial_guess=initial_guess,
+            max_correspondance_distance=3 * sigma,
+            kernel=sigma,
+        )
+        # Compute the difference between the prediction and the actual estimate
+        model_deviation = np.linalg.inv(initial_guess) @ new_pose
+        # Update step: threshold, local map, delta, and the last pose
+        odo.adaptive_threshold.update_model_deviation(model_deviation)
+        odo.local_map.update(frame_downsample, new_pose)
+        odo.last_delta = np.linalg.inv(odo.last_pose) @ new_pose
+        odo.last_pose = new_pose
+        return deskewed, source, keep_mask, aligned, source_intensity
+
+    def _register_frame_deskew_refined(self, frame, timestamps):
+        """KissICP.register_frame, with the scan deskewed again by its own motion.
+
+        Pass 1 is kiss_icp 1.3.0 `register_frame` line for line (deskew with last_delta,
+        the previous scan's motion).  Each further pass deskews the RAW scan with the
+        motion this scan has just been estimated to make, inv(last_pose) @ new_pose (the
+        quantity the GT-deskew run of #012 took from the ground truth), and runs ICP
+        again from new_pose.  The adaptive threshold, the map and last_delta are updated
+        once, with the final result, exactly as upstream does with its single result.
+        """
+        odo = self.odometry
+        sigma = odo.adaptive_threshold.get_threshold()
+        initial_guess = odo.last_pose @ odo.last_delta
+        new_pose, delta = initial_guess, odo.last_delta
+        for _ in range(self.deskew_passes):
+            deskewed = odo.preprocessor.preprocess(frame, timestamps, delta)
+            source, frame_downsample = odo.voxelize(deskewed)
+            new_pose = odo.registration.align_points_to_map(
+                points=source,
+                voxel_map=odo.local_map,
+                initial_guess=new_pose,
+                max_correspondance_distance=3 * sigma,
+                kernel=sigma,
+            )
+            delta = np.linalg.inv(odo.last_pose) @ new_pose
+        odo.adaptive_threshold.update_model_deviation(np.linalg.inv(initial_guess) @ new_pose)
+        odo.local_map.update(frame_downsample, new_pose)
+        odo.last_delta = delta
+        odo.last_pose = new_pose
+        return deskewed, source
+
+    def _image_motion(self, frame, timestamps, intensity, ring):
+        """Motion of this scan over its sweep, from the intensity image (#018-#032).
+
+        4x4 pose of the sensor at the end of the scan in its frame at the start — the
+        quantity KISS calls `delta`.  Identity when the estimate failed (#012: no deskew
+        beats the KISS guess).  Precomputed file: indexed by the scan's position in the
+        sequence, first_scan_index + scan counter.  Online: the estimator needs the RAW scan with the
+        sensor's intensity scale and the ring of every point.
+        """
+        M = None
+        if self._image_motions is not None:
+            i = self.first_scan_index + self._frame_counter
+            if i >= len(self._image_motions):
+                raise ValueError(
+                    f"image_deskew.motion_file has {len(self._image_motions)} scans, but scan {i} "
+                    "of the sequence was requested: the file does not cover this run."
+                )
+            if not np.isnan(self._image_motions[i, 0, 0]):
+                M = self._image_motions[i]
+        else:
+            if intensity is None or ring is None:
+                raise ValueError(
+                    "image_deskew online mode needs per-point intensity and ring: install "
+                    "kiss_slam.tools.point_cloud2.read_point_cloud_raw as the dataset reader "
+                    "(SlamPipeline does this) or set image_deskew.motion_file."
+                )
+            M, _ = self._image_motion_est.motion(frame, timestamps, intensity, ring)
+        if M is None:
+            self.n_image_motion_failures += 1
+            return np.eye(4)
+        return np.asarray(M, dtype=np.float64)
+
+    def _register_frame_image_motion(self, frame, timestamps, intensity, ring):
+        """KissICP.register_frame (kiss_icp 1.3.0) with the image motion in place of last_delta.
+
+        Line for line scripts/run_i3_deskew.py::register_frame (INIT, sigma "fixed"): the
+        scan is deskewed with the motion M measured in the intensity image, the ICP starts
+        from last_pose @ M (use_as_initial_guess; #030: deskew and initial guess must
+        agree), and sigma is `fixed_sigma` for the whole run, never adapted (#031).  With
+        fixed_sigma = None the KISS adaptive threshold is used and updated from the ICP
+        correction as upstream does.  Map, last_delta and last_pose are updated as upstream.
+        """
+        odo = self.odometry
+        delta = self._image_motion(frame, timestamps, intensity, ring)
+        deskewed = odo.preprocessor.preprocess(frame, timestamps, delta)     # deskew from the image
+        source, frame_downsample = odo.voxelize(deskewed)
+        fixed_sigma = self.image_cfg.fixed_sigma
+        sigma = odo.adaptive_threshold.get_threshold() if fixed_sigma is None else float(fixed_sigma)
+        initial_guess = odo.last_pose @ (delta if self.image_cfg.use_as_initial_guess else odo.last_delta)
+        new_pose = odo.registration.align_points_to_map(
+            points=source,
+            voxel_map=odo.local_map,
+            initial_guess=initial_guess,
+            max_correspondance_distance=3 * sigma,
+            kernel=sigma,
+        )
+        if fixed_sigma is None:
+            odo.adaptive_threshold.update_model_deviation(np.linalg.inv(initial_guess) @ new_pose)
+        # else: sigma stays at fixed_sigma; the adaptive threshold is never updated
+        odo.local_map.update(frame_downsample, new_pose)
+        odo.last_delta = np.linalg.inv(odo.last_pose) @ new_pose
+        odo.last_pose = new_pose
+        return deskewed, source
+
+    def _refresh_diag_tree(self):
+        """Rebuild the diagnostics KDTree at most every `rebuild_every` frames."""
+        if self._diag_tree is not None and self._diag_age < self.diag_cfg.rebuild_every:
+            self._diag_age += 1
+            return
+        points = self.odometry.local_map.point_cloud()
+        self._diag_tree = KDTree(points) if len(points) else None
+        self._diag_map_n = len(points)
+        self._diag_age = 1
+
+    def _accumulate_intensity(self,
+                               mapping_frame: np.ndarray,
+                               pose: np.ndarray,
+                               raw_intensity: np.ndarray,
+                               raw_frame: np.ndarray):
+        """Build a mapping_frame → mean_intensity lookup, per voxel.
+
+        We store intensity per-voxel (keyed by the voxel map's grid cell) so
+        that when we later build the Open3D pcd for loop closure we can colour
+        each point by its mean observed intensity.
+
+        Keyed in the current local map's frame (`pose` is relative to the node,
+        as VoxelMap.integrate_frame uses it), not the global frame.
+        """
+        if raw_intensity is None or len(raw_intensity) == 0:
+            return
+
+        # Interpolate raw intensity → mapping_frame resolution
+        mf_intensity = _interpolate_intensity(raw_frame, raw_intensity, mapping_frame)
+        if mf_intensity is None:
+            return
+
+        # Into the local map's frame (same as VoxelMap.IntegrateFrame does)
+        pts_world = transform_points(mapping_frame, pose)
+
+        # Accumulate per voxel
+        vx = self.local_map_voxel_size
+        for pt, iv in zip(pts_world, mf_intensity):
+            key = (int(np.floor(pt[0] / vx)),
+                   int(np.floor(pt[1] / vx)),
+                   int(np.floor(pt[2] / vx)))
+            if key in self._intensity_accumulator:
+                s, c = self._intensity_accumulator[key]
+                self._intensity_accumulator[key] = (s + float(iv), c + 1)
+            else:
+                self._intensity_accumulator[key] = (float(iv), 1)
+
+    def _get_voxel_intensities(self, points_world: np.ndarray) -> np.ndarray:
+        """Look up accumulated intensity for a set of world-frame points."""
+        vx = self.local_map_voxel_size
+        out = np.zeros(len(points_world), dtype=np.float32)
+        for i, pt in enumerate(points_world):
+            key = (int(np.floor(pt[0] / vx)),
+                   int(np.floor(pt[1] / vx)),
+                   int(np.floor(pt[2] / vx)))
+            entry = self._intensity_accumulator.get(key)
+            if entry is not None:
+                out[i] = entry[0] / entry[1]
+        return out
+
+    def compute_closures(self, query_id, query):
+        accepted = self.closer.compute(query_id, query, self.local_map_graph)
+        for source_id, target_id, pose_constraint in accepted:
+            self.closures.append((source_id, target_id))
+            self.optimizer.add_factor(source_id, target_id, pose_constraint, np.eye(6))
+        if accepted:
+            self.optimize_pose_graph()
+
+    def optimize_pose_graph(self):
+        self.optimizer.optimize()
+        estimates = self.optimizer.estimates()
+        for id_, pose in estimates.items():
+            self.local_map_graph[id_].keypose = np.copy(pose)
+
+    def generate_new_node(self):
+        points = self.odometry.local_map.point_cloud()
+        last_local_map = self.local_map_graph.last_local_map
+        relative_motion = last_local_map.local_trajectory[-1]
+        inverse_relative_motion = np.linalg.inv(relative_motion)
+        transformed_local_map = transform_points(points, inverse_relative_motion)
+
+        self.odometry.local_map.clear()
+        self.odometry.local_map.add_points(transformed_local_map)
+        self.odometry.last_pose = np.eye(4)
+        self._prev_pose = np.eye(4)
+        # The map was just re-expressed in the new node's frame: a cached tree
+        # would point at the old coordinates.
+        self._diag_tree = None
+
+        query_id = last_local_map.id
+        query_points = self.voxel_grid.point_cloud()
+        self.local_map_graph.finalize_local_map(
+            self.voxel_grid,
+            intensity_lookup_fn=self._get_voxel_intensities if self._has_intensity else None,
+        )
+        # Reset accumulator for the new local map
+        self._intensity_accumulator = {}
+
+        self.voxel_grid.clear()
+        self.voxel_grid.add_points(transformed_local_map)
+        self.optimizer.add_variable(self.local_map_graph.last_id, self.local_map_graph.last_keypose)
+        self.optimizer.add_factor(
+            self.local_map_graph.last_id, query_id, relative_motion, np.eye(6)
+        )
+        self.compute_closures(query_id, query_points)
+        if self.local_map_splitting_height is not None:
+            # ground_alignment maps the node frame to a frame whose z is the ground normal,
+            # so its third row is "up" in the previous node frame; rotate into the new one.
+            ground_alignment = self.closer.detector.get_ground_alignment_from_id(query_id)
+            self._node_up = relative_motion[:3, :3].T @ ground_alignment[2, :3]
+            self._node_up /= np.linalg.norm(self._node_up)
+            self.node_up_log.append((self.local_map_graph.last_id, self._node_up.copy()))
+            print(f"KissSLAM| node {self.local_map_graph.last_id} up = {np.round(self._node_up, 4).tolist()}")
+
+    @property
+    def poses(self):
+        poses = [np.eye(4)]
+        for node in self.local_map_graph.local_maps():
+            for rel_pose in node.local_trajectory[1:]:
+                poses.append(node.keypose @ rel_pose)
+        return poses
+
+    def fine_grained_optimization(self):
+        pgo = PoseGraphOptimizer(self.config.pose_graph_optimizer)
+        id_ = 0
+        pgo.add_variable(id_, self.local_map_graph[id_].keypose)
+        pgo.fix_variable(id_)
+        for node in self.local_map_graph.local_maps():
+            odometry_factors = [
+                np.linalg.inv(T0) @ T1
+                for T0, T1 in zip(node.local_trajectory[:-1], node.local_trajectory[1:])
+            ]
+            for i, factor in enumerate(odometry_factors):
+                pgo.add_variable(id_ + 1, node.keypose @ node.local_trajectory[i + 1])
+                pgo.add_factor(id_ + 1, id_, factor, np.eye(6))
+                id_ += 1
+            pgo.fix_variable(id_ - 1)
+
+        pgo.optimize()
+        poses = [x for x in pgo.estimates().values()]
+        return poses, pgo

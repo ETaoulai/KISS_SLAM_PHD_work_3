@@ -1,0 +1,38 @@
+# ── Δεδομένα: ΠΟΤΕ στο git ───────────────────────────────────────────────────
+# Το church_02_cut.bag είναι 9.4 GB. Λήψη/οδηγίες: docs/experiment_log.md
+data/
+*.bag
+*.pcd
+*.ply
+*.e57
+
+# ── Ground truth (κατεβαίνει από HuggingFace, βλ. experiment_log.md) ─────────
+gt/
+*gt-tum.txt
+
+# ── Αποτελέσματα εκτελέσεων ──────────────────────────────────────────────────
+slam_output/
+runs/
+*.g2o
+*.npy
+
+# ── Build artifacts (Linux + macOS builds συνυπάρχουν) ───────────────────────
+build/
+_skbuild/
+dist/
+*.egg-info/
+*.so
+*.whl
+
+# ── Python ───────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.ipynb_checkpoints/
+
+# ── Εργαλεία / OS ────────────────────────────────────────────────────────────
+.DS_Store
+.kilo/
+.vscode/
+.idea/
