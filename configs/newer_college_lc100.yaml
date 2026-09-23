@@ -1,0 +1,14 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# KISS-SLAM defaults (the setting of the KISS-SLAM paper) with a strict loop-closure check.
+#
+# Newer College 2020 01_short, default threshold (5): 6 closures with 9-27 inliers, all within
+# 0.25-2.84 m / 0.6-2.0 deg of the ground truth (the odometry edges between neighbouring local
+# maps are off by 0.36-2.99 m).  At 100 none of those 6 passes.  Experiment log #041.
+#
+#   python scripts/run_ncd.py <arm> <seq dir> <out dir> --config=configs/newer_college_lc100.yaml
+# ─────────────────────────────────────────────────────────────────────────────
+
+loop_closer:
+    detector:
+        # Minimum RANSAC inliers of a MapClosures candidate before the ICP overlap check (default 5).
+        inliers_threshold: 100
