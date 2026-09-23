@@ -31,12 +31,15 @@ log. Ένα σημείο ανά είδος πληροφορίας — μην α�
 
 ## Περιβάλλον
 
-Το project τρέχει σε **δύο** μηχανήματα (πλήρεις οδηγίες: `docs/experiment_log.md`):
+Το project τρέχει σε **τρία** μηχανήματα (πλήρεις οδηγίες: `docs/experiment_log.md`):
 
 - **Linux** (`photogrammetrylinux`), conda env `manos_kissslam_for_edit`,
   source `/home/photogrammetrylinux/kiss-slam-for-edit`.
 - **macOS arm64**, conda env `kissslam`. ⚠️ Απαιτεί `scikit-build-core<1.0` και numpy
   χτισμένο με OpenBLAS (όχι Accelerate).
+- **Linux 2** (`photogrammetry`), conda env `kiss-slam-main`, source `/home/photogrammetry/Kiss_SLAM-main`
+  (git → GitHub `ETaoulai/KISS_SLAM_PHD_work`, private· κλάδοι `main`, `fast_test`). OpenCV χτισμένο με SURF.
+  Δεδομένα στο `/media/photogrammetry/A26C3DDF6C3DAF431/data/` (όχι στο `data/` του repo).
 
 ## Δομή
 
@@ -54,6 +57,8 @@ log. Ένα σημείο ανά είδος πληροφορίας — μην α�
 - `scripts/eval_motion_npz.py` — σφάλμα ενός αποθηκευμένου npz κίνησης έναντι GT, χωρίς επανεκτίμηση.
 - `scripts/measure_variance.sh` — διασπορά της μεθόδου (4 σπόροι × 2 τρόποι κατασκευής)· **τρέξ' το πριν από κάθε σύγκριση**.
 - `scripts/analyze_rig_mask.py` — τι είναι καρφωμένο στον σαρωτή (σκιές διάταξης, σιλουέτα χειριστή).
+- `kiss_slam/tools/ncd_pcd.py` — reader του Newer College 2020 (`.pcd` του Ouster, με intensity/ring/απόλυτο χρόνο).
+- `scripts/run_ncd.py` / `scripts/evaluate_ncd.py` — ένας βραχίονας (kiss / sift / surf) στο Newer College / αξιολόγηση έναντι GT.
 - `data/church_02_cut.bag` — test dataset (Oxford Spires christ-church-02, 240 s, 2402 scans).
 - `gt/`, `runs/`, `data/`, `build/` — gitignored.
 

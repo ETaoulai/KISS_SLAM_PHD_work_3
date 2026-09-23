@@ -23,15 +23,18 @@
 
 ### Πού τρέχει
 
-Το project τρέχει πλέον σε **δύο** μηχανήματα:
+Το project τρέχει πλέον σε **τρία** μηχανήματα:
 
-| | Linux (Μανόλης) | macOS arm64 (Λάζαρος) |
-|---|---|---|
-| **Host** | `photogrammetrylinux`, x86_64 | Apple Silicon (M-series) |
-| **Source dir** | `/home/photogrammetrylinux/kiss-slam-for-edit` | `/Users/lazaros/Code/PhD/Taoulai/Kiss_SLAM` |
-| **Conda env** | `manos_kissslam_for_edit` (Py 3.11) | **`kissslam`** (Py 3.11) |
-| **Build dir** | `build/cp311-cp311-linux_x86_64/` | `build/cp311-cp311-macosx_11_0_arm64/` |
-| **Ενεργοποίηση** | `conda activate manos_kissslam_for_edit` | `conda activate kissslam` |
+| | Linux (Μανόλης) | macOS arm64 (Λάζαρος) | Linux 2 (από 23/9) |
+|---|---|---|---|
+| **Host** | `photogrammetrylinux`, x86_64 | Apple Silicon (M-series) | `photogrammetry`, x86_64, 48 πυρήνες, 62 GB |
+| **Source dir** | `/home/photogrammetrylinux/kiss-slam-for-edit` | `/Users/lazaros/Code/PhD/Taoulai/Kiss_SLAM` | `/home/photogrammetry/Kiss_SLAM-main` (git → GitHub `ETaoulai/KISS_SLAM_PHD_work`, private) |
+| **Conda env** | `manos_kissslam_for_edit` (Py 3.11) | **`kissslam`** (Py 3.11) | `kiss-slam-main` (Py 3.11) |
+| **Build dir** | `build/cp311-cp311-linux_x86_64/` | `build/cp311-cp311-macosx_11_0_arm64/` | `build/cp311-cp311-linux_x86_64/` |
+| **Ενεργοποίηση** | `conda activate manos_kissslam_for_edit` | `conda activate kissslam` | `conda activate kiss-slam-main` |
+
+Στο Linux 2 τα δεδομένα είναι στον δίσκο `/media/photogrammetry/A26C3DDF6C3DAF431/data/` (NTFS, ο κύριος δίσκος έχει
+~30 GB ελεύθερα)· εκεί και ο φάκελος `newer_college/` (#041). Το `data/` και το `runs/` του repo δεν υπάρχουν εκεί.
 
 Τα δύο build dirs συνυπάρχουν (το `{wheel_tag}` του scikit-build-core τα κρατά χωριστά),
 οπότε **δεν συγκρούονται** αν συγχρονιστεί ο φάκελος.
@@ -84,6 +87,29 @@ MACOSX_DEPLOYMENT_TARGET=11.0 pip install --no-build-isolation -ve . \
 οι αλλαγές σε C++ (`kiss_slam/kiss_slam_pybind/`) ξαναχτίζονται αυτόματα στο import.
 Αλλαγές **μόνο σε Python** δεν χρειάζονται rebuild.
 
+**Linux 2** (αναπαράξιμη συνταγή — 23/9· ίδιες εκδόσεις με το macOS env):
+```bash
+conda create -y -n kiss-slam-main python=3.11 && conda activate kiss-slam-main
+pip install "kiss-icp>=1.2.3" "map_closures>=2.0.2" "open3d>=0.19.0" numpy PyYAML "pydantic>=2" tqdm \
+            pydantic-settings rosbags typer matplotlib scipy pillow \
+            "scikit-build-core==0.12.2" pyproject_metadata pathspec pybind11 ninja cmake   # ⚠️ scikit-build-core ΟΧΙ 1.x
+pip install --no-build-isolation -ve . \
+    --config-settings=cmake.define.USE_SYSTEM_EIGEN3=OFF \
+    --config-settings=cmake.define.USE_SYSTEM_G2O=OFF \
+    --config-settings=cmake.define.USE_SYSTEM_TSL-ROBIN-MAP=OFF
+```
+
+**OpenCV με SURF** (για `image_deskew.detector: surf`, #041). Το SURF είναι patented και λείπει από **όλα** τα wheels του pip
+(`opencv-python`, ακόμη και `opencv-contrib-python`: «This algorithm is patented and is excluded»). Χτίζεται από τον κώδικα
+(~20 min με 32 πυρήνες) και αντικαθιστά το `opencv-python`· το SIFT μένει ίδιο (ίδια σημεία):
+```bash
+ENABLE_CONTRIB=1 ENABLE_HEADLESS=1 CMAKE_ARGS="-DOPENCV_ENABLE_NONFREE=ON -DBUILD_TESTS=OFF -DBUILD_PERF_TESTS=OFF" \
+    pip wheel --no-deps --no-binary opencv-contrib-python-headless "opencv-contrib-python-headless==5.0.0.93" -w wheels/
+pip uninstall -y opencv-python && pip install --no-deps wheels/opencv_contrib_python_headless-5.0.0.93-*.whl
+python -c "import cv2; cv2.xfeatures2d.SURF_create(); print('SURF OK')"
+```
+Έτοιμο wheel για Linux x86_64 / Py 3.11: `/media/photogrammetry/A26C3DDF6C3DAF431/data/opencv_contrib_python_headless-5.0.0.93-cp311-cp311-linux_x86_64.whl`.
+
 ### Βασική εντολή
 
 ```bash
@@ -114,6 +140,7 @@ kiss_slam_pipeline data/church_02_cut.bag \
 | `--jump` | `-j` | `0` | Από ποιο scan index να ξεκινήσει. Χρήσιμο για να στοχεύσουμε **μόνο το τμήμα της σκάλας**. |
 | `--use-intensity` / `--no-use-intensity` | — | *(config)* | **A/B πειραματικός βραχίονας.** `--no-use-intensity` = vanilla KISS-SLAM baseline· `--use-intensity` = intensity-aided. Υπερισχύει του `intensity.enabled` στο YAML. Αν παραλειφθεί, ισχύει η τιμή του config (default: **disabled**). |
 | `--image-deskew` / `--no-image-deskew` | — | *(config)* | **Η μέθοδος (#027–#032):** deskew κάθε σάρωσης με την κίνηση που μετρά η εικόνα intensity, η ίδια κίνηση ως αρχική θέση του ICP, σ σταθερό 2.0. Υπερισχύει του `image_deskew.enabled` στο YAML (default: **disabled**). Χωρίς `--motion-file` η κίνηση υπολογίζεται **online** από τη σάρωση (χρειάζεται `intensity` + `ring` στο bag· ~60 ms/σάρωση επιπλέον). Δεν συνδυάζεται με `--use-intensity` (ValueError). |
+| `--image-detector` | — | *(config)* | Μόνο με `--image-deskew` (online): χαρακτηριστικά των πανοραμάτων, `sift` ή `surf` (#041). Το `surf` θέλει OpenCV με `OPENCV_ENABLE_NONFREE` (Εγκατάσταση). Υπερισχύει του `image_deskew.detector` (default `sift`). |
 | `--motion-file` | — | *(config)* | Μόνο με `--image-deskew`: `.npz` με προϋπολογισμένες κινήσεις από το `scripts/precompute_i3_motion.py` (π.χ. `runs/i3_motion_car_sp_st0.05_floor.npz`) αντί για online εκτίμηση· δείκτης = αύξων αριθμός σάρωσης (να ξεκινά από το ίδιο scan, χωρίς `--jump`). Υπερισχύει του `image_deskew.motion_file`. |
 | `--sequence` | `-s` | — | Μόνο για sequence-based dataloaders (KITTI κ.λπ.). Δεν χρειάζεται εδώ. |
 | `--meta` | `-m` | — | Μόνο για Ouster pcap. |
@@ -260,10 +287,44 @@ python scripts/precompute_i3_motion.py … --trans-min=8 --trans-mode=auto
 python scripts/eval_motion_npz.py runs/<x>.npz gt/<seq>_gt-tum.txt runs/<run της ακολουθίας>
 ```
 
+Ανιχνευτής, σπόρος και παράλληλη εκτέλεση (#041, #042):
+
+```yaml
+image_deskew:
+  detector: sift                # sift | surf (θέλει OpenCV με OPENCV_ENABLE_NONFREE)
+  surf_hessian_threshold: 100.0 # μόνο surf: μεγαλύτερο = λιγότερα, ισχυρότερα σημεία (400 ≈ πλήθος του SIFT)
+  surf_upright: false           # μόνο surf: χωρίς προσανατολισμό (U-SURF)
+  parallel: false               # κλάδος fast_test: εικόνα σε χωριστή διεργασία, παράλληλα με τον ICP· ίδια τροχιά
+  seed: 0                       # σπόρος του RANSAC του εκτιμητή (#037)
+```
+```bash
+python scripts/precompute_i3_motion.py … --detector=surf [--surf-hessian=400] [--surf-upright]   # κατάληξη _surf[_h400][_up]
+```
+Στον κλάδο `fast_test` το RANSAC σταματά νωρίτερα και το fit χρόνου έχει αναλυτική Ιακωβιανή (#042)· για αναπαραγωγή
+αποτελεσμάτων πριν από αυτόν: `intensity_deskew.RANSAC_CONF = None`, `intensity_deskew.FIT_JAC = "2-point"`.
+
 Προαιρετική μάσκα pixel καρφωμένων στον σαρωτή (#036, απενεργοποιημένη από προεπιλογή):
 `scripts/analyze_rig_mask.py [βήμα] [--bag=]` → `runs/rig_masks_<bag>.npz` (κλειδιά `narrow`, `edges`, `union`, `hole`) και
 `docs/figures/rig_annotated.png`· μετά `precompute_i3_motion.py … --mask=runs/rig_masks_church02.npz --mask-key=union`
 (κατάληξη `_mask-union` στο npz). Στον κώδικα: `intensity_deskew.PIXEL_MASK` (None = off).
+
+### Newer College 2020 (Ouster OS1-64, #041)
+
+Οι ακολουθίες του paper του KISS-SLAM. Λήψη: φόρμα στη σελίδα του dataset → σύνδεσμος Google Drive. Στο Linux 2:
+`/media/photogrammetry/A26C3DDF6C3DAF431/data/newer_college/` (δομή του Drive: `2020/01_short_experiment/…`,
+`2021/collection N - …/`), με `manifest.tsv` (αρχεία, id, μέγεθος) και `download.sh` (συνεχίζει διακοπείσες λήψεις·
+το δημόσιο quota του Drive μπλοκάρει συχνά τα μεγάλα bags — τότε από τον browser, συνδεδεμένος).
+
+```bash
+cd <seq>/raw_format && for z in ouster_zip_files/*.zip; do unzip -q -n "$z" -d .; done   # → ouster_scan/*.pcd
+python scripts/run_ncd.py <kiss|sift|surf> <seq dir> <out dir> [n_scans] [--config=<yaml>] [--seed=N] [--parallel]
+python scripts/evaluate_ncd.py <seq dir> <out dir> [<out dir> …]      # ανά run και ανά βραχίονα (μέσος ± σ)
+```
+Reader: `kiss_slam/tools/ncd_pcd.py` (intensity × 255/1024, ring, **απόλυτος** χρόνος = χρονοσφραγίδα σάρωσης + `t`· GT ανά
+σάρωση στο σύστημα του LiDAR). Το όνομα του out dir μέχρι το πρώτο «_» είναι ο βραχίονας (`sift_s2` → `sift`).
+⚠️ Τα bags του 2021 (topic `/os_cloud_node/points`) μέσα από το `read_point_cloud_raw` θα έδιναν το `t` του Ouster
+**σχετικό** (από την αρχή κάθε σάρωσης) και το intensity σε κλίμακα 0–~1100 — τα δύο προβλήματα του #041. Χρειάζονται
+την ίδια προσαρμογή πριν τρέξουν με `--image-deskew`.
 
 ### Λήψη Ground Truth (Oxford Spires)
 
@@ -444,6 +505,155 @@ SIFT και RoMa. Υπάρχει αυτοβαθμονομούμενη διόρθ
 ---
 
 ## 📒 Εγγραφές πειραμάτων (νεότερα πρώτα)
+
+---
+
+### 2026-09-23 — #042 Κλάδος `fast_test`: τρεις επιταχύνσεις του βήματος της εικόνας (στόχος τα 10 Hz)
+
+**git commit:** κλάδος `fast_test` — `0bb60df` (1), `e42b57b` (2), `0004cf5` (3) · μηχάνημα `photogrammetry`
+
+#### Στόχος
+Ο αισθητήρας δίνει 10 σαρώσεις/s, άρα ο προϋπολογισμός είναι 100 ms ανά σάρωση για όλα (εικόνα + ICP). Να μειωθεί ο χρόνος
+του βήματος της εικόνας **χωρίς να αλλάξει η μέθοδος**.
+
+#### Μέθοδος
+Προφίλ (cProfile) σε 30 σαρώσεις του 01_short (#041), SIFT: ανίχνευση 66 ms (42 %), RANSAC 35 ms (22 %: πάντα 400 υποθέσεις,
+μία-μία σε Python), fit χρόνου 33 ms (21 %: 6 λύσεις `least_squares` με αριθμητικές παραγώγους), πανόραμα 12 ms,
+αναζήτηση + ταίριασμα 6 ms. Τρεις αλλαγές, καθεμία με διακόπτη που επαναφέρει την παλιά συμπεριφορά:
+
+1. **RANSAC με πρόωρη διακοπή** (`RANSAC_CONF = 0.999`, `RANSAC_BATCH = 32`): σταματά μετά από
+   log(1 − 0.999) / log(1 − w³) υποθέσεις (w = ποσοστό inliers της καλύτερης ως τώρα· ~50 για w = 0.5), ποτέ πάνω από 400·
+   οι υποθέσεις υπολογίζονται και κρίνονται 32 τη φορά σε numpy (`kabsch_batch`, `inliers_batch`). `RANSAC_CONF = None` =
+   το παλιό loop με τις ίδιες τυχαίες επιλογές.
+2. **Αναλυτική Ιακωβιανή** του fit χρόνου (`residual_jac`, `FIT_JAC = "analytic"`): παράγωγοι του
+   Exp(φ(t))·p + s(t) − Exp(φ(t′))·q − s(t′) μέσω της αριστερής Ιακωβιανής του SO(3), για τα μοντέλα cv / car / ca.
+   `FIT_JAC = "2-point"` = οι αριθμητικές παράγωγοι του scipy.
+3. **Εικόνα σε χωριστή διεργασία** (`image_deskew.parallel`, προεπιλογή off): ο εκτιμητής ζει σε μία διεργασία-εργάτη
+   (`spawn`)· το pipeline διαβάζει τη σάρωση k+1 και τη δίνει στον εργάτη πριν από τον ICP της k, οπότε τα δύο
+   επικαλύπτονται. Ένας εργάτης, σαρώσεις με τη σειρά → ίδιες κινήσεις με τη σειριακή εκτέλεση. Νέο πεδίο
+   `image_deskew.seed` ώστε ο σπόρος του RANSAC να φτάνει στον εργάτη. Διεργασία και όχι νήμα: ο ICP και τα κομμάτια
+   Python του εκτιμητή δεν θα έτρεχαν ταυτόχρονα λόγω του GIL.
+
+#### Αποτέλεσμα
+Όλες οι μετρήσεις χρόνου με **10 άλλα runs στο ίδιο μηχάνημα** (φορτίο ~77 σε 48 πυρήνες): οι λόγοι ισχύουν, τα απόλυτα ms όχι.
+
+| Αλλαγή | Έλεγχος ορθότητας | Ακρίβεια (01_short, σαρώσεις 4001–4100, SIFT) | Χρόνος |
+|---|---|---|---|
+| 1 | `kabsch_batch` = `kabsch` ως 3·10⁻¹⁵· `inliers_batch` = `inliers` (metric και bearing) | στροφή διάμεσος 0.722 → 0.728°, μετατόπιση 62.6 → 62.6 mm | 81 → 53 ms/ζεύγος |
+| 2 | αναλυτική έναντι πεπερασμένων διαφορών 9·10⁻¹⁰ – 1.4·10⁻⁹ (cv/car/ca, και για γωνίες ~0) | κινήσεις ίδιες ως 1.5·10⁻⁹ | 53 → 45 ms/ζεύγος |
+| 3 | 300 σαρώσεις: τροχιά παράλληλη = σειριακή ως 10⁻¹⁴· άλλος σπόρος → διαφορά 0.22 m (ο σπόρος φτάνει στον εργάτη) | ίδια τροχιά | 55 → 37 s (−32 %) |
+
+Η αλλαγή 1 αλλάζει τις τυχαίες επιλογές του RANSAC, άρα ένα run διαφέρει από τον παλιό κώδικα μέσα στη διασπορά των σπόρων
+(#037)· η ακρίβεια ανά ζεύγος δεν άλλαξε. Το `tests/test_image_deskew.py` (γ) συγκρίνει με npz του παλιού κώδικα και γι' αυτό
+ορίζει `RANSAC_CONF = None`.
+
+#### Συμπέρασμα ⏳
+Οι αλλαγές 1–2 κερδίζουν ~36 ms ανά σάρωση χωρίς αλλαγή της μεθόδου· η 3 κάνει το κόστος ανά σάρωση ≈ max(εικόνα, ICP) αντί
+για το άθροισμα. **Αν η μέθοδος φτάνει τα 10 Hz δεν έχει κριθεί**: χρειάζεται μέτρηση σε ήσυχο μηχάνημα (το STATUS είχε
+~60 ms/σάρωση για την εικόνα στο church_02). Επόμενες, που **αλλάζουν** τη μέθοδο και θέλουν έλεγχο με GT: SURF με κατώφλι
+400 (#041), μικρότερη κατακόρυφη μεγέθυνση του πανοράματος (`UP` 8 → 4).
+
+---
+
+### 2026-09-23 — #041 Newer College 2020 (01_short, Ouster OS1-64): KISS-SLAM, εικόνα + SIFT, εικόνα + SURF (σε εξέλιξη)
+
+**git commit:** κλάδος `fast_test`, `3c54ce0` · δεδομένα `/media/photogrammetry/A26C3DDF6C3DAF431/data/newer_college/`
+
+#### Στόχος
+Η μέθοδος σε δεύτερο dataset και δεύτερο αισθητήρα, στις ακολουθίες του paper του KISS-SLAM (Πίνακας V: 2020 01_short,
+02_long· 2021 cloister, math_easy, quad_easy, stairs, underground_easy). Σύγκριση τριών βραχιόνων έναντι GT:
+(1) εικόνα + SIFT, (2) εικόνα + **SURF** (ζήτημα Μ.Τ.), (3) σκέτος KISS-SLAM.
+
+#### Μέθοδος
+- **Λήψη:** φάκελος Google Drive του dataset (φόρμα στη σελίδα του). 01_short: μόνο LiDAR (10 zip, 18.9 GB → 15 302 `.pcd`,
+  28 GB)· GT για όλες τις ακολουθίες. 02_long υπάρχει μόνο ως πλήρη rosbags (170 GB) — παραλείφθηκε. Τα bags του 2021
+  κατεβαίνουν από τον browser (το δημόσιο quota του Drive τα μπλόκαρε). `manifest.tsv` / `download.sh` στον φάκελο.
+- **Reader** `kiss_slam/tools/ncd_pcd.py`: ο reader του kiss_icp κρατά μόνο x, y, z και φτιάχνει δικούς του χρόνους. Τα `.pcd`
+  έχουν `intensity, t, reflectivity, ring` (64 × 1024). Επιστρέφει (xyz, χρόνος, intensity, ring)· σημεία χωρίς επιστροφή
+  (range 0, 12–56 % ανά σάρωση) απορρίπτονται· GT ανά σάρωση (ακριβώς ίδιες χρονοσφραγίδες) στο σύστημα του LiDAR με το
+  `T_CL` του kiss_icp.
+- **Δύο προσαρμογές στο Ouster:**
+  - **Χρόνος:** το `t` μετρά ns από την αρχή κάθε σάρωσης. Ο εκτιμητής βάζει δύο διαδοχικές σαρώσεις σε έναν άξονα χρόνου,
+    άρα θέλει απόλυτους χρόνους: χρονοσφραγίδα σάρωσης (όνομα αρχείου) + `t`. Με το `t` μόνο, κάθε κίνηση υπολογιζόταν
+    ~100° / 17 m ανά σάρωση και η τροχιά απέκλινε σε 30 s. Ο KISS κανονικοποιεί μόνος του τους χρόνους (έλεγχος: ίδιο deskew
+    με απόλυτους, σχετικούς ή [0,1]).
+  - **Κλίμακα intensity:** Ouster 0 – ~1100 (διάμεσος 150–450), ενώ το πανόραμα ψαλιδίζει στο 255 (φτιάχτηκε για τα 0–255 του
+    Hesai). Ένας σταθερός συντελεστής **255/1024** για όλες τις σαρώσεις και τους δύο ανιχνευτές, χωρίς κανονικοποίηση ανά σάρωση.
+- **SURF:** `image_deskew.detector: sift | surf` (+ `surf_hessian_threshold`, `surf_upright`), CLI `--image-detector`,
+  precompute `--detector=surf` (κατάληξη `_surf`). Το SURF είναι patented: λείπει από όλα τα wheels του pip, ακόμη και το
+  contrib. Χτίστηκε OpenCV 5.0.0.93 contrib με `OPENCV_ENABLE_NONFREE=ON` (οδηγός εκτέλεσης).
+- **Runs:** config προεπιλογής του KISS-SLAM (η ρύθμιση του paper: voxel 1.0 m, χάρτες 100 m)· 4 νήματα ICP ανά run.
+  KISS ×2, SIFT ×4 σπόροι, SURF ×4 σπόροι, παράλληλα. `scripts/run_ncd.py`, αξιολόγηση `scripts/evaluate_ncd.py`
+  (ATE, RPE 1 s, μήκος διαδρομής, z RMSE στο σύστημα του GT όπου z = πάνω, σφάλμα KITTI όπως στο paper).
+
+#### Αποτέλεσμα (μερικό)
+**Κίνηση ανά σάρωση έναντι GT** (σαρώσεις 1000–1200· κίνηση 0.97° / 110 mm):
+
+| | inliers | σφάλμα στροφής | σφάλμα μετατόπισης | κλίμακα |
+|---|---|---|---|---|
+| SIFT | 101 | 0.59° (90ό εκατ. 1.19°) | 32 mm | 0.912 |
+| SURF (κατώφλι 100) | 246 | 0.56° (90ό εκατ. 1.06°) | 29 mm | 0.912 |
+
+**Χρόνος ανά σάρωση του βήματος εικόνας** (σαρώσεις 3000–3020, φορτωμένο μηχάνημα):
+
+| | σημεία | inliers | πανόραμα | ανίχνευση | ταίριασμα | αναζήτηση + RANSAC + fit | σύνολο |
+|---|---|---|---|---|---|---|---|
+| SIFT | 491 | 42 | 16 | 87 | 1 | 43 | 147 ms |
+| SURF 100 | 1795 | 89 | 13 | 68 | 6 | 57 | 145 ms |
+| SURF 400 | 713 | 54 | 13 | 44 | 1 | 46 | 105 ms |
+| SURF 800 | 339 | 29 | 14 | 39 | 1 | 42 | 96 ms |
+
+Το SURF ανιχνεύει ταχύτερα, αλλά με το κατώφλι 100 του OpenCV βρίσκει 3.7× περισσότερα σημεία και το κέρδος χάνεται στο
+ταίριασμα και στα κομμάτια Python ανά αντιστοίχιση.
+
+**Ο σκέτος KISS-SLAM στην αρχή:** ακολουθεί το GT όσο ο αισθητήρας είναι ακίνητος (0–17 s) και μετά «τρέμει»: σαρώσεις
+150–300, μήκος 28.4 m έναντι 2.1 m GT, βήμα έως 0.94 m. Ίδιο με τον reader του kiss_icp (28.9 m) → όχι θέμα του reader.
+
+**Πλήρη runs (15 301 σαρώσεις): σε εξέλιξη** — τα αποτελέσματα προστίθενται εδώ.
+
+#### Συμπέρασμα ⏳ (ανοιχτό)
+Η μέθοδος μεταφέρεται στο Ouster με δύο προσαρμογές του reader και μετρά την κίνηση ανά σάρωση περίπου όσο καλά όσο στο
+church_02 (~0.5°, #038)· η κλίμακα 0.91 δείχνει ότι η μεροληψία κοντινού πεδίου του #039 υπάρχει και εδώ. Ο συντελεστής
+intensity 255/1024 είναι επιλογή **προς έγκριση Λ.Γ.** Η σύγκριση των βραχιόνων κρίνεται με RPE και μήκος διαδρομής
+(4 σπόροι), όχι με το ATE ενός run.
+
+---
+
+### 2026-09-23 — #040 Επιθεώρηση κώδικα: τρία σφάλματα, ένα ανοιχτό ερώτημα
+
+**git commit:** `66a0db4` (main, πρώτο commit στο GitHub) · μηχάνημα `photogrammetry`
+
+#### Στόχος
+Ανάγνωση του κώδικα της μεθόδου (`intensity_deskew.py`, `slam.py`) και σύγκριση με το upstream.
+
+#### Αποτέλεσμα
+**Σωστά:** τα αντίγραφα του `register_frame` ταυτίζονται με το upstream KISS-ICP (και εκείνο δίνει `kernel=sigma`)· τα
+defaults του `image_deskew` αναπαράγουν τη μέθοδο του STATUS· η αντιστοίχιση intensity ↔ σημείου ακολουθεί τις αυστηρές
+ανισότητες του KISS.
+
+**Τρία σφάλματα, διορθωμένα:**
+1. **Intensity των τοπικών χαρτών σε λάθος σύστημα αναφοράς** (`local_map_graph.finalize_local_map`, `slam._accumulate_intensity`).
+   Αποθηκευόταν στο σύστημα του τοπικού χάρτη και αναζητούνταν στο παγκόσμιο → για κάθε χάρτη μετά τον πρώτο, intensity 0
+   παντού, οπότε το ColoredICP των ενώσεων έτρεχε χωρίς φωτομετρικό όρο. Έλεγχος: σημεία που βρίσκουν intensity 0 % → 100 %.
+   Αφορά μόνο το κλειστό «refine/replace»· **κάθε συμπέρασμα για ColoredICP στις ενώσεις δεν δοκίμασε ποτέ intensity.**
+2. **`--motion-file` με `--jump`** (`slam._image_motion`): το αρχείο διαβαζόταν με τον μετρητή του run από το 0 → με
+   `--jump 500` η σάρωση 500 έπαιρνε την κίνηση της 0. Τώρα `first_scan_index` (το ορίζει το pipeline) + έλεγχος ότι το αρχείο
+   καλύπτει το run (αλλιώς σφάλμα, όχι σιωπηλά ταυτοτική). Έλεγχος με συνθετικό npz: jump 5 → γραμμές 5, 6, (7 αποτυχία), 8, 9.
+3. **Διόρθωση κοντινού πεδίου «auto»** (`match_motion.last_ratio`): δεν μηδενιζόταν πριν από τις πρόωρες επιστροφές, οπότε
+   σε αποτυχημένη σάρωση ο διάμεσος έπαιρνε ξανά τον λόγο της προηγούμενης. Μόνο με `trans_min_range` (ανενεργό από προεπιλογή).
+
+**Ανοιχτό ερώτημα (ιδέα, όχι σφάλμα):** το `fit_time` μετρά υπόλοιπα σε μέτρα με κατώφλι 0.10 m. Ένα pixel (0.35°) είναι
+~0.006·r m, άρα οι μακρινές αντιστοιχίσεις κόβονται ή βαραίνουν λιγότερο και η κίνηση στηρίζεται στις κοντινές — ακριβώς
+αυτές που το #039 βρήκε κοντές (~74 % στα < 5 m). Το RANSAC έχει ήδη έλεγχο διεύθυνσης (`INLIER_TEST="bearing"`), το `fit_time`
+όχι. Φθηνό πείραμα: υπόλοιπα διαιρεμένα με την απόσταση στο `fit_time`, κρίση με RPE και μήκος διαδρομής.
+
+**Μικρότερα:** οι ρυθμίσεις κοντινού πεδίου γράφονται σε καθολικές μεταβλητές του `intensity_deskew` και μένουν ανάμεσα σε δύο
+`KissSLAM` στην ίδια διεργασία· `TRANS_FACTOR` / διόρθωση μετατόπισης δεν περνούν στην καμπύλη (`last_params`) που χρησιμοποιεί
+το `deskew_curve`· το `lookup` μπορεί να πάρει pixel έως 2 στήλες μακριά χωρίς διόρθωση· περίοδος σταθερή 0.1 s.
+
+#### Συμπέρασμα ⏳
+Η μέθοδος στην προεπιλογή της δεν επηρεάζεται. Το σφάλμα 1 ακυρώνει ό,τι είχε ειπωθεί για ColoredICP στις ενώσεις· το 2 αφορά
+μόνο runs με `--jump` + `--motion-file`, που πρέπει να ξαναγίνουν.
 
 ---
 
