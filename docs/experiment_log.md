@@ -34,7 +34,12 @@
 | **Ενεργοποίηση** | `conda activate manos_kissslam_for_edit` | `conda activate kissslam` | `conda activate kiss-slam-main` |
 
 Στο Linux 2 τα δεδομένα είναι στον δίσκο `/media/photogrammetry/A26C3DDF6C3DAF431/data/` (NTFS, ο κύριος δίσκος έχει
-~30 GB ελεύθερα)· εκεί και ο φάκελος `newer_college/` (#041). Το `data/` και το `runs/` του repo δεν υπάρχουν εκεί.
+~30 GB ελεύθερα), οργανωμένα 23/9 — χάρτης στο `data/README.md` εκεί: `newer_college/` (οι 7 ακολουθίες του paper του
+KISS-SLAM, #041), `oxford_spires/2024-03-18-christ-church-0{2,3}/` (**ολόκληρες** ακολουθίες: `rosbag/` + `ground_truth/`
+με GT και vilens-slam σε TUM), `runs/`, `software/` (wheel OpenCV με SURF). Τα church bags εκεί είναι οι **πλήρεις**
+εγγραφές (church_02: 2 bags, 592 s· church_03: 312 s), όχι το κομμένο `church_02_cut.bag` (240 s) των πειραμάτων ως #039 —
+άρα και ο στόχος §2.3 του STATUS (ολόκληρο το christ-church-02) έχει πλέον δεδομένα. Το `data/` και το `runs/` του repo δεν
+υπάρχουν σε αυτό το μηχάνημα.
 
 Τα δύο build dirs συνυπάρχουν (το `{wheel_tag}` του scikit-build-core τα κρατά χωριστά),
 οπότε **δεν συγκρούονται** αν συγχρονιστεί ο φάκελος.
@@ -549,7 +554,7 @@ SIFT και RoMa. Υπάρχει αυτοβαθμονομούμενη διόρθ
 
 **Μέτρηση σε ήσυχο μηχάνημα (προσθήκη 23/9):** όλο το 01_short, `fast_test` (1 + 2 ενεργά), `--parallel`, **SURF κατώφλι 400**,
 διαγνωστικά ICP off (KD-tree ανά σάρωση, δεν αλλάζει την τροχιά), ICP με όλους τους πυρήνες· 1 run, config
-`runs_01_short_speed/surf400_speed.yaml` στον δίσκο δεδομένων.
+`data/runs/newer_college_01_short_speed/surf400_speed.yaml` στον δίσκο δεδομένων.
 
 | | τιμή |
 |---|---|
@@ -574,7 +579,7 @@ SIFT και RoMa. Υπάρχει αυτοβαθμονομούμενη διόρθ
 
 ### 2026-09-23 — #041 Newer College 2020 (01_short, Ouster OS1-64): η εικόνα μειώνει το RPE 58–60 %· το SURF λίγο καλύτερο από το SIFT
 
-**git commit:** κλάδος `fast_test`, `3c54ce0` · δεδομένα `/media/photogrammetry/A26C3DDF6C3DAF431/data/newer_college/`
+**git commit:** κλάδος `fast_test`, `3c54ce0` · δεδομένα `/media/photogrammetry/A26C3DDF6C3DAF431/data/newer_college/`, runs `…/data/runs/newer_college_01_short/`
 
 #### Στόχος
 Η μέθοδος σε δεύτερο dataset και δεύτερο αισθητήρα, στις ακολουθίες του paper του KISS-SLAM (Πίνακας V: 2020 01_short,
