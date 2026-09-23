@@ -294,6 +294,49 @@ def residual(x, p, tp, q, tq):
     return (Rotation.from_rotvec(rp).apply(p) + sp - Rotation.from_rotvec(rq).apply(q) - sq).ravel()
 
 
+def _skew(v):
+    """(N, 3, 3) cross-product matrices [v]x."""
+    S = np.zeros(v.shape[:-1] + (3, 3))
+    S[..., 0, 1], S[..., 0, 2], S[..., 1, 2] = -v[..., 2], v[..., 1], -v[..., 0]
+    return S - np.swapaxes(S, -1, -2)
+
+
+def _d_rotate(phi, y):
+    """∂(Exp(phi)·x)/∂phi = −[y]x · J_l(phi), y = Exp(phi)·x, for N rotation vectors at once (N, 3, 3).
+
+    J_l(phi) = I + (1 − cos θ)/θ² [phi]x + (θ − sin θ)/θ³ [phi]x², the left Jacobian of SO(3); the
+    coefficients by their series below θ = 1e-4 (the motion of one scan is ~1 deg = 0.017 rad).
+    """
+    th = np.linalg.norm(phi, axis=1)
+    small = th < 1e-4
+    t = np.where(small, 1.0, th)
+    a = np.where(small, 0.5 - th ** 2 / 24, (1 - np.cos(t)) / t ** 2)
+    b = np.where(small, 1 / 6 - th ** 2 / 120, (t - np.sin(t)) / t ** 3)
+    K = _skew(phi)
+    Jl = np.eye(3) + a[:, None, None] * K + b[:, None, None] * K @ K
+    return -_skew(y) @ Jl
+
+
+def residual_jac(x, p, tp, q, tq):
+    """Exact Jacobian of `residual` (3N × len(x)), for least_squares (FIT_JAC = "analytic")."""
+    J = np.zeros((len(p), 3, len(x)))
+    for pts, t, sign in ((p, tp, 1.0), (q, tq, -1.0)):
+        rot, _ = pose_at(x, t)
+        D = sign * _d_rotate(rot, Rotation.from_rotvec(rot).apply(pts))
+        J[:, :, 0:3] += D * t[:, None, None]                       # w
+        J[:, :, 3:6] += sign * t[:, None, None] * np.eye(3)        # v
+        if len(x) >= 9:
+            J[:, :, 6:9] += D * (0.5 * t ** 2)[:, None, None]      # alpha
+        if len(x) == 12:
+            J[:, :, 9:12] += sign * (0.5 * t ** 2)[:, None, None] * np.eye(3)   # a
+    return J.reshape(-1, len(x))
+
+
+# Jacobian of the time fit: "analytic" (residual_jac) or "2-point" (scipy's finite differences, every result
+# before fast_test).  Same minimum; the analytic one needs no extra residual evaluations.
+FIT_JAC = "analytic"
+
+
 def fit_time(p, tp, q, tq, M0, model="cv"):
     """Motion over the later scan, pose(1), using each point's time → (4x4, inliers)."""
     x = np.concatenate([Rotation.from_matrix(M0[:3, :3]).as_rotvec(), M0[:3, 3]])
@@ -304,6 +347,7 @@ def fit_time(p, tp, q, tq, M0, model="cv"):
             x = np.concatenate([x, np.zeros(extra)])    # start from the constant-velocity solution
         for _ in range(3):
             x = least_squares(residual, x, args=(p[keep], tp[keep], q[keep], tq[keep]),
+                              jac=residual_jac if FIT_JAC == "analytic" else "2-point",
                               loss="soft_l1", f_scale=0.05).x
             r = np.linalg.norm(residual(x, p, tp, q, tq).reshape(-1, 3), axis=1)
             keep = r < FIT_THR
