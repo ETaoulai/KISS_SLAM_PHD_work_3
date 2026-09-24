@@ -173,6 +173,11 @@ class ImageDeskewConfig(BaseModel):
     # last pose (every result before #054); "constant_velocity" = no deskew, ICP started from KISS's constant-velocity
     # guess last_pose @ last_delta.
     fallback: Literal["identity", "constant_velocity"] = "identity"
+    # Two starting points (#057): when the image motion and KISS's constant-velocity guess differ by more than this
+    # (deg of rotation), register the scan twice — (A) deskewed with the image motion and started from it, (B) not
+    # deskewed and started from constant velocity — and keep the result that fits the local map better (truncated mean
+    # distance of the source to its nearest map point).  None = off.
+    two_start_deg: Optional[float] = None
     # Folder for the panoramas + matches of every failed / rejected scan (rejected.csv lists them).  None = off.
     save_rejected_dir: Optional[str] = None
     # Near-field bias of intensity matching (#039): matches closer than ~5 m report only ~74 %

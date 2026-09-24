@@ -352,6 +352,8 @@ class KissSLAM:
         self._motion_pool = None           # image_deskew.parallel: worker process running the estimator
         self._motion_futures = deque()     # motions submitted to it, oldest first
         self._rotvec_history = []          # image_deskew.rotation_smoothing (#047)
+        self.n_two_start = 0                # image_deskew.two_start_deg: scans registered twice (#057)
+        self.n_two_start_cv_won = 0         # ... of which the constant-velocity start fitted better
         self._image_motions = None         # precomputed (N,4,4), NaN where failed
         # Index in the sequence of the first scan fed to process_scan: the precomputed
         # file has one row per scan of the whole sequence.  SlamPipeline sets it to its
@@ -771,18 +773,36 @@ class KissSLAM:
         else:
             delta = M
             start = delta if self.image_cfg.use_as_initial_guess else odo.last_delta
-        deskewed = odo.preprocessor.preprocess(frame, timestamps, delta)     # deskew from the image
-        source, frame_downsample = odo.voxelize(deskewed)
         fixed_sigma = self.image_cfg.fixed_sigma
         sigma = odo.adaptive_threshold.get_threshold() if fixed_sigma is None else float(fixed_sigma)
-        initial_guess = odo.last_pose @ start
-        new_pose = odo.registration.align_points_to_map(
-            points=source,
-            voxel_map=odo.local_map,
-            initial_guess=initial_guess,
-            max_correspondance_distance=3 * sigma,
-            kernel=sigma,
-        )
+
+        def register(deskew_delta, start_delta):
+            deskewed_ = odo.preprocessor.preprocess(frame, timestamps, deskew_delta)
+            source_, frame_downsample_ = odo.voxelize(deskewed_)
+            guess_ = odo.last_pose @ start_delta
+            pose_ = odo.registration.align_points_to_map(
+                points=source_, voxel_map=odo.local_map, initial_guess=guess_,
+                max_correspondance_distance=3 * sigma, kernel=sigma,
+            )
+            return deskewed_, source_, frame_downsample_, guess_, pose_
+
+        deskewed, source, frame_downsample, initial_guess, new_pose = register(delta, start)   # deskew from the image
+        two = self.image_cfg.two_start_deg
+        if two is not None and M is not None:
+            cv = odo.last_delta
+            disagree = np.degrees(np.arccos(np.clip((np.trace((np.linalg.inv(cv) @ M)[:3, :3]) - 1) / 2, -1, 1)))
+            if disagree > two:                                # (B): no deskew, constant-velocity start (#057)
+                b = register(np.eye(4), cv)
+                map_pts = odo.local_map.point_cloud()
+                if len(map_pts):
+                    tree = KDTree(map_pts)
+                    fit = lambda src, pose: float(np.minimum(tree.query(src @ pose[:3, :3].T + pose[:3, 3], workers=-1)[0],
+                                                             3 * sigma).mean())
+                    fa, fb = fit(source, new_pose), fit(b[1], b[4])
+                    self.n_two_start += 1
+                    if fb < fa:
+                        deskewed, source, frame_downsample, initial_guess, new_pose = b
+                        self.n_two_start_cv_won += 1
         if fixed_sigma is None:
             odo.adaptive_threshold.update_model_deviation(np.linalg.inv(initial_guess) @ new_pose)
         # else: sigma stays at fixed_sigma; the adaptive threshold is never updated

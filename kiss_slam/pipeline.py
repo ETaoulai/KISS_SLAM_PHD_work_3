@@ -234,6 +234,9 @@ class SlamPipeline(OdometryPipeline):
             n = self._last - self._first
             print(f"KissSLAM| image motion: {n - self.kiss_slam.n_image_motion_failures}/{n} scans "
                   f"({self.kiss_slam.n_image_motion_failures} fell back to identity)")
+            if self.kiss_slam.n_two_start:
+                print(f"KissSLAM| two starting points: {self.kiss_slam.n_two_start} scans registered twice, "
+                      f"constant-velocity start kept in {self.kiss_slam.n_two_start_cv_won}")
 
     # ─────────────────────────────────────────────────────────────────────────
     # CSV
