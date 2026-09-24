@@ -2,7 +2,7 @@
 """Map sharpness against a survey prior map (#048): how well each arm's deskewed scans fit a real surface.
 
     python scripts/map_sharpness.py <prior map .ply> <ground truth> <frame> <run dir> [<run dir> ...]
-                                    [--points=2000000] [--poses=own|gt] [--out=<csv>]
+                                    [--points=2000000] [--poses=own|gt] [--prior-voxel=<m>] [--out=<csv>]
 
 Each run dir needs deskewed_frames.npz (run_ncd.py --save-frames=<voxel>) and its poses (TUM).  Per run:
 1. the map: every deskewed scan (sensor frame) placed at the run's estimated pose;
@@ -15,6 +15,7 @@ Each run dir needs deskewed_frames.npz (run_ncd.py --save-frames=<voxel>) and it
    (parts the survey does not cover, moving people) and their share is reported.
 --poses=gt: the deskewed scans are placed at the GROUND-TRUTH poses (interpolated at the run's best time shift)
 instead of the run's own, and no alignment is needed: trajectory errors drop out and only the deskew is measured.
+--prior-voxel: voxel-downsample the prior map (after cropping it to the run) before use, e.g. 0.02 for a 1 cm TLS map.
 Reported: median and mean point-to-plane distance of the kept points, share within 5 / 10 cm, share kept.
 Lower distances = a sharper map.  The prior map is a 5 cm cloud, so ~1-2 cm is the floor of the measure.
 """
@@ -34,10 +35,18 @@ MAX_DIST = 0.5
 
 
 def load_prior(path):
-    pc = o3d.io.read_point_cloud(str(path))
-    if not pc.has_normals():
-        pc.estimate_normals(o3d.geometry.KDTreeSearchParamKNN(20))
-    return pc
+    return o3d.io.read_point_cloud(str(path))
+
+
+def prior_around(prior, lo, hi, voxel=None):
+    """The prior map inside the box [lo, hi], optionally voxel-downsampled, with normals (estimated if the file has
+    none: on the crop only — the christ-church TLS map is ~10x the New College one)."""
+    crop = prior.crop(o3d.geometry.AxisAlignedBoundingBox(lo, hi))
+    if voxel:
+        crop = crop.voxel_down_sample(voxel)
+    if not crop.has_normals():
+        crop.estimate_normals(o3d.geometry.KDTreeSearchParamKNN(20))
+    return crop
 
 
 def run_map(run, gt_t, gt_T, n_points, rng, use_gt=False):
@@ -93,7 +102,7 @@ def main():
         rng = np.random.default_rng(0)
         world, shift, n_all = run_map(run, gt_t, gt_T, n_points, rng, opts.get("poses", "own") == "gt")
         lo, hi = world.min(0) - 1.0, world.max(0) + 1.0                  # the prior map around this run only
-        crop = prior.crop(o3d.geometry.AxisAlignedBoundingBox(lo, hi))
+        crop = prior_around(prior, lo, hi, float(opts["prior-voxel"]) if "prior-voxel" in opts else None)
         tree = cKDTree(np.asarray(crop.points))
         r = dict(run=run.name, arm=run.name.split("_")[0], time_shift_s=shift, map_points=n_all,
                  **score(world, crop, tree, np.asarray(crop.normals)))

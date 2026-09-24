@@ -221,6 +221,9 @@ class DiagnosticsConfig(BaseModel):
     # deskewed_frames.npz in the results dir: the map an arm builds, for the map-sharpness test (#048).
     # None = off.  Read-only: does not change the trajectory.
     save_deskewed_voxel: Optional[float] = None
+    # Keep only this random fraction of each saved scan's points (own RNG, seed 0): the map-sharpness score
+    # samples 2 M points anyway, and a whole cloister run at 5 cm is 2.1 GB (#049).
+    save_deskewed_fraction: float = 1.0
 
 
 class OccupancyMapperConfig(BaseModel):
