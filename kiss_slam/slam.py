@@ -823,9 +823,16 @@ class KissSLAM:
                     deskewed, source, frame_downsample, initial_guess, new_pose = results[best]
                     self.n_two_start += 1
                     self.n_two_start_cv_won += best == "cv"
-                    self.two_start_log.append(dict(scan=self._frame_counter, disagree_deg=disagree, kept=best,
-                                                   **{f"fit_{k}": v for k, v in fits.items()},
-                                                   **{f"rot_{k}_deg": rot(np.eye(4), c[1]) for k, c in cands.items()}))
+                    from scipy.spatial.transform import Rotation as _R
+                    motion_of = lambda pose: np.linalg.inv(odo.last_pose) @ pose      # this scan's motion per start
+                    row = dict(scan=self._frame_counter, disagree_deg=disagree, kept=best,
+                               **{f"fit_{k}": v for k, v in fits.items()},
+                               **{f"rot_{k}_deg": rot(np.eye(4), c[1]) for k, c in cands.items()})
+                    for k, r in results.items():       # the motion each start converged to: rotation vector (deg), translation (m)
+                        mk = motion_of(r[4])
+                        row.update({f"{k}_r{a}": v for a, v in zip("xyz", np.degrees(_R.from_matrix(mk[:3, :3]).as_rotvec()))})
+                        row.update({f"{k}_t{a}": v for a, v in zip("xyz", mk[:3, 3])})
+                    self.two_start_log.append(row)
             self.two_start_seconds += time.perf_counter() - t0
         if fixed_sigma is None:
             odo.adaptive_threshold.update_model_deviation(np.linalg.inv(initial_guess) @ new_pose)
