@@ -4,7 +4,8 @@
     python scripts/results_table.py [<data root>] [--out=<prefix>] [--offset=best] [--extra=/home/photogrammetry/kiss_runs]
 
 Reads the run folders under <data root>/runs (default /media/photogrammetry/A26C3DDF6C3DAF431/data) with the
-evaluation of scripts/evaluate_ncd.py, and writes <prefix>.md and <prefix>.csv (default <data root>/runs/results_all).
+evaluation of scripts/evaluate_ncd.py, and writes <prefix>.md and <prefix>.csv (default /home/photogrammetry/kiss_runs/results_all,
+on ext4: the NTFS data disk is read-only, #052).
 Sequences: Newer College 2020 01_short (#041), the five of 2021 (#043), Oxford Spires christ-church-02 / -03 full
 recordings.  --offset=best: every run is scored at its own best time shift (evaluate_ncd.best_offset, #045),
 default <prefix> then results_all_best_offset.  Arms are the run-folder names up to the first "_" (kiss, sift, surf); folders that do not exist are skipped.
@@ -20,10 +21,11 @@ from evaluate_ncd import evaluate, load_gt  # noqa: E402
 
 ROOT = Path(next((a for a in sys.argv[1:] if not a.startswith("--")), "/media/photogrammetry/A26C3DDF6C3DAF431/data"))
 OFFSET = "best" if "--offset=best" in sys.argv else 0.0
-OUT = Path(next((a.split("=", 1)[1] for a in sys.argv[1:] if a.startswith("--out=")),
-                ROOT / "runs" / ("results_all_best_offset" if OFFSET == "best" else "results_all")))
 NC, RUNS = ROOT / "newer_college", ROOT / "runs"
 EXTRA = Path(next((a.split("=", 1)[1] for a in sys.argv[1:] if a.startswith("--extra=")), "/home/photogrammetry/kiss_runs"))
+# Written to EXTRA (ext4), never to the NTFS data disk: ntfs3 kernel BUG on writes (#046, #052; decision M.T. 24/9).
+OUT = Path(next((a.split("=", 1)[1] for a in sys.argv[1:] if a.startswith("--out=")),
+                EXTRA / ("results_all_best_offset" if OFFSET == "best" else "results_all")))
 
 # (dataset, sequence, sensor, ground truth, frame, runs folder)
 SEQUENCES = [("Newer College 2020", "01_short", "Ouster OS1-64", NC / "2020/01_short_experiment", "ncd2020",
