@@ -38,6 +38,20 @@ for n in (2, 3):
     SEQUENCES.append(("Oxford Spires", f"christ-church-0{n}", "Hesai QT64",
                       ROOT / f"oxford_spires/2024-03-18-christ-church-0{n}/ground_truth/gt-tum_church_{n}.txt", "spires",
                       RUNS / "oxford_spires_full" / f"church_0{n}"))
+# #052: harder Newer College 2021 sequences and four more Oxford Spires sites
+for seq, gt in [("quad_hard", "collection 1 - newer college/ground_truth/tum_format/gt-nc-quad-hard.csv"),
+                ("math_medium", "collection 3 - maths institute/ground_truth/tum_format/gt_math_medium.csv"),
+                ("underground_medium", "collection 4 - underground mine/ground truth/tum_format/medium_gt_state_tum.csv"),
+                ("underground_hard", "collection 4 - underground mine/ground truth/tum_format/hard_gt_state_tum.csv")]:
+    SEQUENCES.append(("Newer College 2021", seq, "Ouster OS0-128", NC / "2021" / gt, "ncd2021", RUNS / "newer_college_2021" / seq))
+for seq, folder, gt in [("keble-college-03", "2024-03-12-keble-college-03", "gt-tum_keeble_3.txt"),
+                        ("observatory-quarter-01", "2024-03-13-observatory-quarter-01", "gt-tum_observatory_quarter_1.txt"),
+                        ("blenheim-palace-02", "2024-03-14-blenheim-palace-02", "gt-tum_blenheim_pallace.txt"),
+                        ("bodleian-library-02", "2024-05-20-bodleian-library-02", "gt-tum_bodleian_library_2.txt")]:
+    run = {"keble-college-03": "keble_03", "observatory-quarter-01": "observatory_01", "blenheim-palace-02": "blenheim_02",
+           "bodleian-library-02": "bodleian_02"}[seq]
+    SEQUENCES.append(("Oxford Spires", seq, "Hesai QT64", ROOT / f"oxford_spires/{folder}/ground_truth/{gt}", "spires",
+                      RUNS / "oxford_spires_full" / run))
 
 ARMS = {"kissncd": "KISS-SLAM, kiss_icp NCD loader", "kissnodeskew": "KISS-SLAM, no deskew", "kissdetail": "KISS-SLAM, indoor_detail", "kiss": "KISS-SLAM",
         "sift": "i3 + SIFT", "surf": "i3 + SURF", "surftrans": "i3 + SURF, translation only",
