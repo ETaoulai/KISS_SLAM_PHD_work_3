@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """All results in one table: every sequence x arm, mean ± σ over its runs, against the ground truth.
 
-    python scripts/results_table.py [<data root>] [--out=<prefix>] [--offset=best]
+    python scripts/results_table.py [<data root>] [--out=<prefix>] [--offset=best] [--extra=/home/photogrammetry/kiss_runs]
 
 Reads the run folders under <data root>/runs (default /media/photogrammetry/A26C3DDF6C3DAF431/data) with the
 evaluation of scripts/evaluate_ncd.py, and writes <prefix>.md and <prefix>.csv (default <data root>/runs/results_all).
@@ -23,6 +23,7 @@ OFFSET = "best" if "--offset=best" in sys.argv else 0.0
 OUT = Path(next((a.split("=", 1)[1] for a in sys.argv[1:] if a.startswith("--out=")),
                 ROOT / "runs" / ("results_all_best_offset" if OFFSET == "best" else "results_all")))
 NC, RUNS = ROOT / "newer_college", ROOT / "runs"
+EXTRA = Path(next((a.split("=", 1)[1] for a in sys.argv[1:] if a.startswith("--extra=")), "/home/photogrammetry/kiss_runs"))
 
 # (dataset, sequence, sensor, ground truth, frame, runs folder)
 SEQUENCES = [("Newer College 2020", "01_short", "Ouster OS1-64", NC / "2020/01_short_experiment", "ncd2020",
@@ -38,7 +39,7 @@ for n in (2, 3):
                       ROOT / f"oxford_spires/2024-03-18-christ-church-0{n}/ground_truth/gt-tum_church_{n}.txt", "spires",
                       RUNS / "oxford_spires_full" / f"church_0{n}"))
 
-ARMS = {"kissnodeskew": "KISS-SLAM, no deskew", "kissdetail": "KISS-SLAM, indoor_detail", "kiss": "KISS-SLAM",
+ARMS = {"kissncd": "KISS-SLAM, kiss_icp NCD loader", "kissnodeskew": "KISS-SLAM, no deskew", "kissdetail": "KISS-SLAM, indoor_detail", "kiss": "KISS-SLAM",
         "sift": "i3 + SIFT", "surf": "i3 + SURF", "surftrans": "i3 + SURF, translation only",
         "surfrot": "i3 + SURF, rotation only", "surfsmooth3": "i3 + SURF, rotation smoothed (3)"}
 METRICS = [("ate", "ATE [m]", "{:.3f}"), ("rpe_t", "RPE 1 s [cm]", "{:.2f}"), ("rpe_r", "RPE 1 s [°]", "{:.3f}"),
@@ -49,7 +50,15 @@ METRICS = [("ate", "ATE [m]", "{:.3f}"), ("rpe_t", "RPE 1 s [cm]", "{:.2f}"), ("
 def main():
     rows = []
     for dataset, seq, sensor, gt, frame, folder in SEQUENCES:
-        runs = sorted(p for p in folder.glob("*_*") if p.is_dir()) if folder.exists() else []
+        # Also the same folder under EXTRA (runs written to ext4 after the ntfs3 kernel bug, #046); a run counts
+        # only if its log ends with the "wall" line of /usr/bin/time, i.e. it finished (the crashed ones did not).
+        found = {}
+        for base in (folder, EXTRA / folder.relative_to(RUNS)):
+            for p in (sorted(base.glob("*_*")) if base.exists() else []):
+                log = p.parent / f"{p.name}.log"
+                if p.is_dir() and log.exists() and "\nwall " in log.read_text(errors="replace").replace("\r", "\n"):
+                    found[p.name] = p
+        runs = [found[k] for k in sorted(found)]
         if not runs:
             print(f"skip {seq}: no runs in {folder}")
             continue

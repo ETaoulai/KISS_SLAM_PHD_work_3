@@ -80,8 +80,9 @@ def main():
 
 if __name__ == "__main__":      # required: image_deskew.parallel starts its worker with "spawn"
     main()
-    # Everything is written: leave without the interpreter's shutdown.  One KISS run of #044 hung there for 2 h
-    # (main thread gone, 9 thread-pool workers waiting on a futex forever, process a zombie).
+    # Everything is written: leave without the interpreter's shutdown.  (Added for a run of #044 that looked like a
+    # hang at exit — main thread gone, pool threads waiting on a futex; the real cause was a kernel BUG in the ntfs3
+    # driver while writing to the NTFS data disk, #046.  Kept: it does no harm.)
     sys.stdout.flush()
     sys.stderr.flush()
     os._exit(0)
