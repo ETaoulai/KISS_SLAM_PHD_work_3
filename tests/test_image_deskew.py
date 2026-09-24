@@ -116,7 +116,7 @@ def run_online_motions():
     used, orig = [], slam._image_motion
 
     def recording(*args):
-        M = orig(*args); used.append(M); return M
+        M = orig(*args); used.append(np.eye(4) if M is None else M); return M   # None = failed (#054)
 
     slam._image_motion = recording
     for i in range(N_ONLINE):

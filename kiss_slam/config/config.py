@@ -162,6 +162,19 @@ class ImageDeskewConfig(BaseModel):
     # rotation_smoothing k > 1: mean rotation vector of the last k successful image motions (causal).
     use_parts: Literal["full", "translation", "rotation"] = "full"
     rotation_smoothing: int = 1
+    # Plausibility gate (#054), each None = off (every result before #054): an image motion is rejected when fewer
+    # than gate_min_matches matches support it, when it rotates more than gate_max_rotation_deg in one scan, or when its
+    # rotation differs from the last accepted one by more than gate_max_rotation_change_deg.  blenheim-palace-02 (#053):
+    # ~26 matches and rotations of 30-50 deg where the truth was ~3 deg.
+    gate_min_matches: Optional[int] = None
+    gate_max_rotation_deg: Optional[float] = None
+    gate_max_rotation_change_deg: Optional[float] = None
+    # What a scan without an image motion (failed or rejected) gets: "identity" = no deskew and ICP started from the
+    # last pose (every result before #054); "constant_velocity" = no deskew, ICP started from KISS's constant-velocity
+    # guess last_pose @ last_delta.
+    fallback: Literal["identity", "constant_velocity"] = "identity"
+    # Folder for the panoramas + matches of every failed / rejected scan (rejected.csv lists them).  None = off.
+    save_rejected_dir: Optional[str] = None
     # Near-field bias of intensity matching (#039): matches closer than ~5 m report only ~74 %
     # of the true translation, those beyond ~12 m report 100 %, so every translation comes out
     # 1.5-5 % short.  With trans_min_range set (m), the correction is measured online and

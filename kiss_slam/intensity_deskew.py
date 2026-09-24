@@ -385,11 +385,11 @@ def make_detector(detector="sift", surf_hessian=100.0, surf_upright=False):
 
 def features(xyz, ts, inten, ring, detector):
     """Panorama + keypoints/descriptors (SIFT or SURF, see make_detector) of one raw scan:
-    (P, T, valid, keypoints, descriptors, t_start)."""
+    (P, T, valid, keypoints, descriptors, t_start, panorama image).  match_motion uses the first six."""
     ok = ~np.isnan(xyz).any(axis=1) & (np.linalg.norm(xyz, axis=1) > MIN_RANGE)
     big, P, T, valid = panorama(xyz[ok], ts[ok], inten[ok], ring[ok])
     kps, desc = detector.detectAndCompute(big, None)
-    return P, T, valid, kps, desc, ts[ok].min()
+    return P, T, valid, kps, desc, ts[ok].min(), big
 
 
 _DEFAULT = object()   # "use the module-level knob" (scripts set STUCK_* after import)
@@ -413,10 +413,12 @@ def match_motion(f1, f2, period, rng, bf, model="cv", subpixel=False,
     # Reset before any early return: a failed scan must not leave the previous scan's ratio for
     # ScanMotionEstimator to append again (TRANS_MODE "auto").
     match_motion.last_ratio = None
-    P1, T1, v1, kp1, d1, _ = f1; P2, T2, v2, kp2, d2, t_start = f2
+    P1, T1, v1, kp1, d1, _ = f1[:6]; P2, T2, v2, kp2, d2, t_start = f2[:6]
+    match_motion.last_good = []
     if d1 is None or d2 is None or len(kp1) < 2 or len(kp2) < 2:
         return None, None, 0
     good = [m for m, n in bf.knnMatch(d1, d2, k=2) if m.distance < RATIO * n.distance]
+    match_motion.last_good = good                      # for the images of rejected pairs (#054)
     if PIXEL_MASK is not None:
         def on_mask(kp):
             u, v = kp.pt
@@ -500,11 +502,18 @@ class ScanMotionEstimator:
 
     def __init__(self, period=0.1, seed=0, model="cv", subpixel=False,
                  stuck_min=_DEFAULT, floor_only=_DEFAULT, elev=_DEFAULT, range_=_DEFAULT,
-                 detector="sift", surf_hessian=100.0, surf_upright=False, intensity_scale=1.0):
+                 detector="sift", surf_hessian=100.0, surf_upright=False, intensity_scale=1.0,
+                 gate_min_matches=None, gate_max_rotation_deg=None, gate_max_rotation_change_deg=None,
+                 save_rejected_dir=None):
         """`stuck_min`, `floor_only`, `elev`, `range_`: the stuck-match filter (#025-#027);
         left at their defaults they read the module globals STUCK_* at each call.
         `detector`, `surf_hessian`, `surf_upright`: the panorama features, see make_detector.
-        `intensity_scale`: multiplies the raw intensity (1.0 Hesai, 255/1024 Ouster, #041)."""
+        `intensity_scale`: multiplies the raw intensity (1.0 Hesai, 255/1024 Ouster, #041).
+        Plausibility gate (#054), each None = off: a motion is rejected (returned as None) when fewer than
+        `gate_min_matches` matches support it, when its rotation over the scan exceeds `gate_max_rotation_deg`, or
+        when its rotation vector differs from the last ACCEPTED one by more than `gate_max_rotation_change_deg`.
+        `save_rejected_dir`: for every rejected or failed scan, both panoramas, their matches and a line in
+        rejected.csv (scan, time, reason, matches, rotation), to inspect the pairs by eye."""
         self.period, self.model, self.subpixel = period, model, subpixel
         self.intensity_scale = intensity_scale
         self.stuck_min, self.floor_only, self.elev, self.range_ = stuck_min, floor_only, elev, range_
@@ -514,8 +523,15 @@ class ScanMotionEstimator:
         self.rng = np.random.default_rng(seed)
         self.prev = None
         self.ratios = []; self.last_factor = 1.0
+        self.gate = (gate_min_matches, gate_max_rotation_deg, gate_max_rotation_change_deg)
+        self.save_rejected_dir = save_rejected_dir
+        self.k = -1                                   # index of the current scan
+        self.last_accepted_rotvec = None
+        self.last_reason = None
 
     def motion(self, xyz, ts, inten, ring):
+        self.k += 1
+        self.last_reason = None
         if self.intensity_scale != 1.0:
             inten = inten * self.intensity_scale
         cur = features(xyz, ts, inten, ring, self.detector)
@@ -537,4 +553,48 @@ class ScanMotionEstimator:
             self.last_factor = f
         self.last_params = match_motion.last_params if M1 is not None else None
         self.last_t_start = cur[5]
-        return M1, n
+        return self._gate(M1, n, prev, cur)
+
+    def _gate(self, M, n, prev, cur):
+        """The plausibility gate (#054): None + self.last_reason for a rejected motion; saves the pair if asked."""
+        min_n, max_rot, max_change = self.gate
+        reason, rot_deg = None, float("nan")
+        if M is None:
+            reason = "failed"
+        else:
+            rv = Rotation.from_matrix(M[:3, :3]).as_rotvec()
+            rot_deg = float(np.degrees(np.linalg.norm(rv)))
+            if min_n is not None and n < min_n:
+                reason = f"matches {n} < {min_n}"
+            elif max_rot is not None and rot_deg > max_rot:
+                reason = f"rotation {rot_deg:.1f} > {max_rot:g} deg"
+            elif (max_change is not None and self.last_accepted_rotvec is not None
+                  and np.degrees(np.linalg.norm(rv - self.last_accepted_rotvec)) > max_change):
+                reason = (f"rotation change {np.degrees(np.linalg.norm(rv - self.last_accepted_rotvec)):.1f} "
+                          f"> {max_change:g} deg")
+            else:
+                self.last_accepted_rotvec = rv
+        self.last_reason = reason
+        if reason is not None and self.save_rejected_dir is not None:
+            self._save_pair(prev, cur, n, rot_deg, reason)
+        return (None, n) if reason is not None else (M, n)
+
+    def _save_pair(self, prev, cur, n, rot_deg, reason):
+        import csv
+        import os
+        os.makedirs(self.save_rejected_dir, exist_ok=True)
+        stem = os.path.join(self.save_rejected_dir, f"scan{self.k:05d}")
+        cv2.imwrite(stem + "_a_previous.png", prev[6])
+        cv2.imwrite(stem + "_b_current.png", cur[6])
+        good = sorted(match_motion.last_good, key=lambda m: m.distance)[:300]
+        img = cv2.drawMatches(prev[6], prev[3], cur[6], cur[3], good, None,
+                              flags=cv2.DrawMatchesFlags_NOT_DRAW_SINGLE_POINTS)
+        cv2.imwrite(stem + "_c_matches.png", img)
+        new = not os.path.exists(os.path.join(self.save_rejected_dir, "rejected.csv"))
+        with open(os.path.join(self.save_rejected_dir, "rejected.csv"), "a", newline="") as f:
+            w = csv.writer(f)
+            if new:
+                w.writerow(["scan", "t_start", "reason", "matches_after_checks", "ratio_test_matches",
+                            "keypoints_previous", "keypoints_current", "rotation_deg"])
+            w.writerow([self.k, f"{cur[5]:.6f}", reason, n, len(match_motion.last_good), len(prev[3]), len(cur[3]),
+                        f"{rot_deg:.3f}"])

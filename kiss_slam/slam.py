@@ -375,6 +375,10 @@ class KissSLAM:
                 estimator_kwargs = dict(
                     seed=self.image_cfg.seed,
                     intensity_scale=self.image_cfg.intensity_scale,
+                    gate_min_matches=self.image_cfg.gate_min_matches,
+                    gate_max_rotation_deg=self.image_cfg.gate_max_rotation_deg,
+                    gate_max_rotation_change_deg=self.image_cfg.gate_max_rotation_change_deg,
+                    save_rejected_dir=self.image_cfg.save_rejected_dir,
                     model=self.image_cfg.model,
                     subpixel=self.image_cfg.subpixel,
                     stuck_min=self.image_cfg.stuck_min,
@@ -698,9 +702,9 @@ class KissSLAM:
                 M = self._motion_futures.popleft().result()
             else:
                 M, _ = self._image_motion_est.motion(frame, timestamps, intensity, ring)
-        if M is None:
+        if M is None:                         # failed, or rejected by the plausibility gate (#054)
             self.n_image_motion_failures += 1
-            return np.eye(4)
+            return None
         return self._image_motion_parts(np.asarray(M, dtype=np.float64))
 
     def _image_motion_parts(self, M):
@@ -760,12 +764,18 @@ class KissSLAM:
         correction as upstream does.  Map, last_delta and last_pose are updated as upstream.
         """
         odo = self.odometry
-        delta = self._image_motion(frame, timestamps, intensity, ring)
+        M = self._image_motion(frame, timestamps, intensity, ring)
+        if M is None:                         # no image motion: no deskew (#012); ICP start per image_deskew.fallback
+            delta = np.eye(4)
+            start = odo.last_delta if self.image_cfg.fallback == "constant_velocity" else delta
+        else:
+            delta = M
+            start = delta if self.image_cfg.use_as_initial_guess else odo.last_delta
         deskewed = odo.preprocessor.preprocess(frame, timestamps, delta)     # deskew from the image
         source, frame_downsample = odo.voxelize(deskewed)
         fixed_sigma = self.image_cfg.fixed_sigma
         sigma = odo.adaptive_threshold.get_threshold() if fixed_sigma is None else float(fixed_sigma)
-        initial_guess = odo.last_pose @ (delta if self.image_cfg.use_as_initial_guess else odo.last_delta)
+        initial_guess = odo.last_pose @ start
         new_pose = odo.registration.align_points_to_map(
             points=source,
             voxel_map=odo.local_map,

@@ -4,6 +4,7 @@
     python scripts/run_ncd.py <arm> <sequence> <out dir> [n_scans] [--config=<yaml>] [--seed=N] [--parallel]
                               [--topic=/os_cloud_node/points] [--intensity-scale=0.249] [--diag]
                               [--parts=full|translation|rotation] [--rot-smooth=k] [--save-frames=<voxel m>] [--save-fraction=f]
+                              [--gate [--gate-min=0] [--gate-rot=10] [--gate-drot=8]]
 
 sequence: a 2020 sequence dir with raw_format/ouster_scan/*.pcd (kiss_slam/tools/ncd_pcd.py), or a
           .bag file, or a folder whose *.bag are ONE split sequence (read in time order; 2021 bags).
@@ -18,6 +19,8 @@ worker process, overlapping the ICP (image_deskew.parallel); same trajectory, le
 --parts / --rot-smooth: ablation of the image motion (image_deskew.use_parts / rotation_smoothing, #047).
 --save-frames: keep every deskewed scan (voxel-downsampled) in deskewed_frames.npz, for the map-sharpness test (#048);
 --save-fraction: only this random fraction of each scan's points (#049).
+--gate: plausibility gate on each image motion (>= gate-min matches, 0 = off by default; rotation <= gate-rot deg, change from the last
+accepted <= gate-drot deg), constant-velocity fallback, and the rejected / failed pairs saved in <out>/rejected_pairs (#054).
 --diag: per-scan ICP diagnostics (a KD-tree over the local map per scan; off by default here, it
 does not change the trajectory).  For bags the written timestamps are the scans' header stamps
 (the loader's own are the bag record times), so the evaluation matches them to the ground truth.
@@ -57,6 +60,12 @@ def main():
         config.diagnostics.icp_metrics = "--diag" in sys.argv
         config.image_deskew.use_parts = opts.get("parts", "full")
         config.image_deskew.rotation_smoothing = int(opts.get("rot-smooth", 1))
+        if "--gate" in sys.argv or "gate-min" in opts:           # plausibility gate + constant-velocity fallback (#054)
+            config.image_deskew.gate_min_matches = int(opts.get("gate-min", 0))    # 0 = off (#054: Blenheim has few matches everywhere)
+            config.image_deskew.gate_max_rotation_deg = float(opts.get("gate-rot", 10.0))
+            config.image_deskew.gate_max_rotation_change_deg = float(opts.get("gate-drot", 8.0))
+            config.image_deskew.fallback = "constant_velocity"
+            config.image_deskew.save_rejected_dir = str(out / "rejected_pairs")
         if "save-frames" in opts:
             config.diagnostics.save_deskewed_voxel = float(opts["save-frames"])
             config.diagnostics.save_deskewed_fraction = float(opts.get("save-fraction", 1.0))
