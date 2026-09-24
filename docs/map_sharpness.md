@@ -1,0 +1,39 @@
+# Map sharpness against the New College survey map (#048)
+
+Point-to-plane distance of each run's map to the 5 cm survey map (`new-college-combined-5cm-v2.ply`), 1 run per arm (seed 0), KISS-SLAM paper config.  **GT poses**: the arm's deskewed scans placed at the ground-truth poses — only the deskew is measured.  **Own poses**: the map the SLAM builds.  Lower = sharper.  *Best per sequence in bold.*
+
+## Deskew only (scans at the ground-truth poses)
+
+| Sequence | Arm | median [cm] | mean [cm] | < 5 cm [%] | < 10 cm [%] | within 0.5 m [%] |
+|---|---|---|---|---|---|---|
+| quad_easy | KISS-SLAM, no deskew | **2.73** | 4.21 | **71.8** | 90.4 | 99.5 |
+|  | KISS-SLAM | 3.14 | 5.18 | 65.7 | 85.1 | 99.3 |
+|  | KISS-SLAM, indoor_detail | 3.23 | 5.33 | 64.5 | 84.4 | 99.2 |
+|  | i3 + SIFT | 2.88 | 4.72 | 69.2 | 87.5 | 99.3 |
+|  | i3 + SURF | 2.77 | 4.45 | 70.9 | 88.9 | 99.5 |
+|  | i3 + SURF, rotation only | 2.84 | 4.50 | 70.1 | 88.9 | 99.5 |
+| cloister | KISS-SLAM, no deskew | 2.22 | 3.06 | 83.2 | 96.6 | 99.5 |
+|  | KISS-SLAM | 2.56 | 3.96 | 75.0 | 91.8 | 98.6 |
+|  | KISS-SLAM, indoor_detail | 2.27 | 3.42 | 80.6 | 94.4 | 99.0 |
+|  | i3 + SIFT | **1.85** | 2.53 | **89.6** | 97.8 | 99.5 |
+|  | i3 + SURF | 1.88 | 2.57 | 89.0 | 97.8 | 99.5 |
+|  | i3 + SURF, rotation only | 2.82 | 3.73 | 73.5 | 95.1 | 99.5 |
+
+## The map as built (own poses)
+
+| Sequence | Arm | median [cm] | mean [cm] | < 5 cm [%] | < 10 cm [%] | within 0.5 m [%] |
+|---|---|---|---|---|---|---|
+| quad_easy | KISS-SLAM, no deskew | 2.06 | 2.93 | 84.4 | 96.5 | 99.6 |
+|  | KISS-SLAM | 2.17 | 3.15 | 82.4 | 95.5 | 99.5 |
+|  | KISS-SLAM, indoor_detail | 2.14 | 3.13 | 82.6 | 95.4 | 99.5 |
+|  | i3 + SIFT | 1.93 | 2.68 | 87.2 | 97.3 | 99.5 |
+|  | i3 + SURF | **1.86** | 2.53 | **88.7** | 97.8 | 99.6 |
+|  | i3 + SURF, rotation only | 1.94 | 2.66 | 87.1 | 97.6 | 99.6 |
+| cloister | KISS-SLAM, no deskew | **6.10** | 9.56 | **44.9** | 63.8 | 34.9 |
+|  | KISS-SLAM | 7.25 | 9.99 | 40.4 | 59.7 | 45.6 |
+|  | KISS-SLAM, indoor_detail | 6.42 | 9.06 | 43.1 | 63.7 | 85.7 |
+|  | i3 + SIFT | 6.84 | 9.06 | 40.9 | 63.3 | 73.2 |
+|  | i3 + SURF | 6.93 | 9.37 | 40.6 | 62.2 | 70.5 |
+|  | i3 + SURF, rotation only | 6.17 | 9.73 | 44.1 | 63.1 | 70.6 |
+
+**Cloister, own poses: not valid.** Only 35–86 % of the map lies within 0.5 m of the survey and the rigid ICP moved the maps 1–5 m: the 429 m trajectory has drift and no loop closure, so one rigid alignment cannot fit the whole map.  **Stairs** is not in the table: the stairwell interior is not in the survey (25–36 % within 0.5 m even at GT poses).
