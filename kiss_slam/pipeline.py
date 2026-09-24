@@ -175,6 +175,7 @@ class SlamPipeline(OdometryPipeline):
         self._write_graph()
         self._write_closures()
         self._write_local_maps()
+        self._write_deskewed_frames()
         self._write_icp_metrics()
         self._plot_icp_residuals()
         self._plot_motion_and_deviation()
@@ -433,6 +434,19 @@ class SlamPipeline(OdometryPipeline):
             occupancy_2d_map_dir = os.path.join(occupancy_dir, "map2d")
             os.makedirs(occupancy_2d_map_dir, exist_ok=True)
             occupancy_grid_mapper.write_2d_occupancy_grid(occupancy_2d_map_dir)
+
+    def _write_deskewed_frames(self):
+        """diagnostics.save_deskewed_voxel: every scan as deskewed (sensor frame, voxel-downsampled), with
+        offsets, for the map-sharpness test (#048).  Scan k is frames[offsets[k]:offsets[k+1]], at poses[k]."""
+        frames = self.kiss_slam.deskewed_frames
+        if not frames:
+            return
+        np.savez(
+            os.path.join(self.results_dir, "deskewed_frames.npz"),
+            points=np.concatenate(frames),
+            offsets=np.concatenate([[0], np.cumsum([len(f) for f in frames])]),
+            voxel=self.slam_config.diagnostics.save_deskewed_voxel,
+        )
 
     def _write_local_maps(self):
         local_maps_dir = os.path.join(self.results_dir, "local_maps")

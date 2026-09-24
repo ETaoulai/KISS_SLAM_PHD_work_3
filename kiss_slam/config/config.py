@@ -217,6 +217,10 @@ class DiagnosticsConfig(BaseModel):
 
     icp_metrics: bool = True
     rebuild_every: int = 1
+    # Keep every scan as deskewed and registered (voxel-downsampled to this size, m), and write them to
+    # deskewed_frames.npz in the results dir: the map an arm builds, for the map-sharpness test (#048).
+    # None = off.  Read-only: does not change the trajectory.
+    save_deskewed_voxel: Optional[float] = None
 
 
 class OccupancyMapperConfig(BaseModel):

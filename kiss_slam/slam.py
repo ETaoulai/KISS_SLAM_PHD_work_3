@@ -403,6 +403,7 @@ class KissSLAM:
 
         # Diagnostics-only KDTree cache (never affects the trajectory).
         self.diag_cfg = config.diagnostics
+        self.deskewed_frames = []           # diagnostics.save_deskewed_voxel (#048)
         self._diag_tree = None
         self._diag_map_n = 0
         self._diag_age = 0
@@ -545,6 +546,9 @@ class KissSLAM:
         self._prev_pose = np.copy(current_pose)
 
         # ── 4. Map integration ───────────────────────────────────────────────
+        if self.diag_cfg.save_deskewed_voxel is not None:     # map-sharpness test (#048), sensor frame
+            self.deskewed_frames.append(
+                voxel_down_sample(deskewed_frame, self.diag_cfg.save_deskewed_voxel).astype(np.float32))
         mapping_frame = voxel_down_sample(deskewed_frame, self.local_map_voxel_size)
         self.voxel_grid.integrate_frame(mapping_frame, current_pose)
 
