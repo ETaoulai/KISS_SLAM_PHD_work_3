@@ -24,6 +24,12 @@ Point-to-plane distance of each run's map to the 5 cm survey map (New College: `
 |  | i3 + SIFT | 2.04 | 3.21 | 81.7 | 95.0 | 98.9 |
 |  | i3 + SURF | **2.01** | 3.15 | **82.2** | 95.2 | 98.9 |
 |  | i3 + SURF, rotation only | 2.35 | 3.67 | 75.9 | 93.2 | 98.9 |
+| christ-church-02 (Hesai) | KISS-SLAM, no deskew | 2.31 | 3.83 | 78.2 | 92.4 | 96.4 |
+|  | KISS-SLAM | 5.18 | 7.85 | 48.7 | 73.5 | 95.4 |
+|  | KISS-SLAM, indoor_detail | 4.35 | 6.90 | 54.9 | 78.2 | 95.6 |
+|  | i3 + SIFT | 2.20 | 3.55 | 80.3 | 93.6 | 96.5 |
+|  | i3 + SURF | **2.13** | 3.42 | **81.4** | 94.1 | 96.5 |
+|  | i3 + SURF, rotation only | 2.53 | 4.00 | 74.8 | 92.0 | 96.5 |
 
 ## The map as built (own poses)
 
@@ -47,5 +53,15 @@ Point-to-plane distance of each run's map to the 5 cm survey map (New College: `
 |  | i3 + SIFT | **2.17** | 3.10 | **82.9** | 96.5 | 98.9 |
 |  | i3 + SURF | 2.26 | 3.23 | 81.1 | 96.0 | 98.9 |
 |  | i3 + SURF, rotation only | 2.68 | 3.61 | 76.4 | 95.4 | 98.9 |
+| christ-church-02 (Hesai) | KISS-SLAM, no deskew | 7.26 | 10.40 | 37.4 | 61.8 | 90.7 |
+|  | KISS-SLAM | 9.11 | 12.24 | 30.6 | 53.5 | 87.7 |
+|  | KISS-SLAM, indoor_detail | 13.91 | 16.90 | 21.1 | 38.5 | 59.5 |
+|  | i3 + SIFT | 4.70 | 7.25 | 52.4 | 78.3 | 89.3 |
+|  | i3 + SURF | 5.00 | 7.59 | 50.0 | 75.3 | 95.2 |
+|  | i3 + SURF, rotation only | **4.68** | 6.86 | **52.5** | 77.7 | 95.6 |
 
 **Cloister, own poses: not valid.** Only 35–86 % of the map lies within 0.5 m of the survey and the rigid ICP moved the maps 1–5 m: the 429 m trajectory has drift and no loop closure, so one rigid alignment cannot fit the whole map.  **Stairs** is not in the table: the stairwell interior is not in the survey (25–36 % within 0.5 m even at GT poses).
+
+**christ-church-02, own poses: partly valid.** The 642 m trajectory has drift and no loop closure: the rigid ICP moved the maps 15–208 cm
+and 60–95 % of the points lie within 0.5 m (indoor_detail, ATE 3.1 m, is the worst).  **christ-church-03 at 100 % of each scan (#051)**
+gives the same numbers as the 10 % sample above within 0.1 percentage point (e.g. SURF 82.2 % / 81.2 %), so 10 % is enough.
