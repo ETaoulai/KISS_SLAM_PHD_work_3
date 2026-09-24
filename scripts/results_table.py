@@ -17,6 +17,7 @@ from pathlib import Path
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).parent))
+from evaluate_gt import find_tum  # noqa: E402
 from evaluate_ncd import evaluate, load_gt  # noqa: E402
 
 ROOT = Path(next((a for a in sys.argv[1:] if not a.startswith("--")), "/media/photogrammetry/A26C3DDF6C3DAF431/data"))
@@ -63,6 +64,29 @@ METRICS = [("ate", "ATE [m]", "{:.3f}"), ("rpe_t", "RPE 1 s [cm]", "{:.2f}"), ("
            ("kitti", "KITTI [%]", "{:.2f}"), ("fail", "image fails", "{:.0f}"), ("offset", "time shift [s]", "{:+.3f}")]
 
 
+CACHE_VERSION = 1      # bump when evaluate_ncd.evaluate changes what it computes
+
+
+def cached_evaluate(gt, frame, gt_t, gt_T, run):
+    """evaluate_ncd.evaluate, cached in EXTRA/.eval_cache (ext4).  The key covers the run's trajectory file (path, size,
+    mtime), its log (image-motion failures, runtime), the ground-truth file (path, size, mtime), the frame, the time-shift
+    mode and CACHE_VERSION, so any change to one of them is scored again."""
+    import hashlib
+    import json
+
+    tum, log, gtp = Path(find_tum(run)), run.parent / f"{run.name}.log", Path(gt)
+    gtf = gtp / "ground_truth" / "registered_poses.csv" if gtp.is_dir() else gtp
+    stat = lambda f: f"{f.resolve()}:{f.stat().st_size}:{f.stat().st_mtime_ns}" if f.exists() else f"{f}:-"
+    key = hashlib.sha1("|".join([stat(tum), stat(log), stat(gtf), frame, str(OFFSET), str(CACHE_VERSION)]).encode()).hexdigest()
+    path = EXTRA / ".eval_cache" / f"{key}.json"
+    if path.exists():
+        return json.loads(path.read_text())
+    v = {k: float(x) for k, x in evaluate(gt_t, gt_T, run, OFFSET).items()}
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(v))
+    return v
+
+
 def main():
     rows = []
     for dataset, seq, sensor, gt, frame, folder in SEQUENCES:
@@ -79,7 +103,7 @@ def main():
             print(f"skip {seq}: no runs in {folder}")
             continue
         gt_t, gt_T, _ = load_gt(gt, frame)
-        res = {r.name: evaluate(gt_t, gt_T, r, OFFSET) for r in runs}
+        res = {r.name: cached_evaluate(gt, frame, gt_t, gt_T, r) for r in runs}
         for v in res.values():
             v["excess"] = 100 * (v["path"] / v["gt_path"] - 1)
         gt_path = next(iter(res.values()))["gt_path"]

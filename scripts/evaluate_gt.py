@@ -93,15 +93,16 @@ def rpe(est, gt, stamps, delta_s=1.0):
     """Relative pose error σε παράθυρο ~delta_s δευτερολέπτων."""
     dt = np.median(np.diff(stamps))
     k = max(1, int(round(delta_s / dt)))
-    trans, rot = [], []
-    for i in range(len(est) - k):
-        d_est = np.linalg.inv(est[i]) @ est[i + k]
-        d_gt = np.linalg.inv(gt[i]) @ gt[i + k]
-        err = np.linalg.inv(d_gt) @ d_est
-        trans.append(np.linalg.norm(err[:3, 3]))
-        ca = np.clip((np.trace(err[:3, :3]) - 1) / 2, -1, 1)
-        rot.append(np.degrees(np.arccos(ca)))
-    return np.array(trans), np.array(rot), k
+    n = len(est) - k
+    if n <= 0:
+        return np.array([]), np.array([]), k
+    # All windows at once (was a loop over poses; same numbers).  err = inv(inv(G_i) G_i+k) inv(E_i) E_i+k.
+    d_est = np.linalg.inv(est[:n]) @ est[k:k + n]
+    d_gt = np.linalg.inv(gt[:n]) @ gt[k:k + n]
+    err = np.linalg.inv(d_gt) @ d_est
+    trans = np.linalg.norm(err[:, :3, 3], axis=1)
+    ca = np.clip((np.trace(err[:, :3, :3], axis1=1, axis2=2) - 1) / 2, -1, 1)
+    return trans, np.degrees(np.arccos(ca)), k
 
 
 def find_tum(run_dir):
