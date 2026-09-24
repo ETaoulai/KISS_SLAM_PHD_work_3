@@ -351,7 +351,7 @@ class KissSLAM:
         self._image_motion_est = None      # online estimator
         self._motion_pool = None           # image_deskew.parallel: worker process running the estimator
         self._motion_futures = deque()     # motions submitted to it, oldest first
-        self._rotvec_history = []          # image_deskew.rotation_smoothing (#046)
+        self._rotvec_history = []          # image_deskew.rotation_smoothing (#047)
         self._image_motions = None         # precomputed (N,4,4), NaN where failed
         # Index in the sequence of the first scan fed to process_scan: the precomputed
         # file has one row per scan of the whole sequence.  SlamPipeline sets it to its
@@ -697,7 +697,7 @@ class KissSLAM:
         return self._image_motion_parts(np.asarray(M, dtype=np.float64))
 
     def _image_motion_parts(self, M):
-        """Ablation (#046): which part of the image motion is used, and rotation smoothing.
+        """Ablation (#047): which part of the image motion is used, and rotation smoothing.
 
         rotation_smoothing = k > 1: the rotation is the mean rotation vector of this and the previous
         k-1 successful image motions (causal).  use_parts: "full" as measured; "translation" keeps the

@@ -15,7 +15,7 @@ the KISS-SLAM paper); only image_deskew.enabled / detector differ.  --seed: RANS
 image-motion estimator, for measuring run-to-run spread (#037).  --parallel: the image motion in a
 worker process, overlapping the ICP (image_deskew.parallel); same trajectory, less time per scan.
 --intensity-scale: image_deskew.intensity_scale, default 255/1024 for the Ouster signal (#041).
---parts / --rot-smooth: ablation of the image motion (image_deskew.use_parts / rotation_smoothing, #046).
+--parts / --rot-smooth: ablation of the image motion (image_deskew.use_parts / rotation_smoothing, #047).
 --diag: per-scan ICP diagnostics (a KD-tree over the local map per scan; off by default here, it
 does not change the trajectory).  For bags the written timestamps are the scans' header stamps
 (the loader's own are the bag record times), so the evaluation matches them to the ground truth.

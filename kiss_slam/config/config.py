@@ -157,7 +157,7 @@ class ImageDeskewConfig(BaseModel):
     # Adaptive threshold: fixed at this value (m) for the whole run (#031).
     # None = KISS adaptive (updated from the ICP correction of the initial guess).
     fixed_sigma: Optional[float] = 2.0
-    # Ablation (#046), applied to the image motion before BOTH its uses (deskew, initial guess):
+    # Ablation (#047), applied to the image motion before BOTH its uses (deskew, initial guess):
     # use_parts "full" | "translation" (no rotation) | "rotation" (no translation);
     # rotation_smoothing k > 1: mean rotation vector of the last k successful image motions (causal).
     use_parts: Literal["full", "translation", "rotation"] = "full"
