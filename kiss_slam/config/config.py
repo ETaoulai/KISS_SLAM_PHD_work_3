@@ -178,6 +178,10 @@ class ImageDeskewConfig(BaseModel):
     # deskewed and started from constant velocity — and keep the result that fits the local map better (truncated mean
     # distance of the source to its nearest map point).  None = off.
     two_start_deg: Optional[float] = None
+    # Motion from the RANGE panorama too (#058; log range + CLAHE, SURF at range_hessian): "fallback" = used when the
+    # intensity motion fails or is rejected; "candidate" = an extra starting point for the two-start registration.
+    range_motion: Optional[Literal["fallback", "candidate"]] = None
+    range_hessian: float = 10.0
     # Folder for the panoramas + matches of every failed / rejected scan (rejected.csv lists them).  None = off.
     save_rejected_dir: Optional[str] = None
     # Near-field bias of intensity matching (#039): matches closer than ~5 m report only ~74 %

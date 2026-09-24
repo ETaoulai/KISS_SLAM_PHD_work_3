@@ -392,6 +392,20 @@ def features(xyz, ts, inten, ring, detector):
     return P, T, valid, kps, desc, ts[ok].min(), big
 
 
+def range_features(xyz, ts, ring, detector, _clahe=[]):
+    """Like `features`, but the panorama is log range (1-60 m -> 0-255) with local contrast (CLAHE 4x16) instead of
+    intensity (#057-#058): where intensity repeats (rows of identical windows) the depth structure does not."""
+    if not _clahe:
+        _clahe.append(cv2.createCLAHE(clipLimit=3.0, tileGridSize=(4, 16)))
+    r = np.linalg.norm(xyz, axis=1)
+    ok = ~np.isnan(xyz).any(axis=1) & (r > MIN_RANGE)
+    val = np.clip(255 * np.log(np.clip(r, 1, 60)) / np.log(60), 0, 255)
+    big, P, T, valid = panorama(xyz[ok], ts[ok], val[ok], ring[ok])
+    big = _clahe[0].apply(big)
+    kps, desc = detector.detectAndCompute(big, None)
+    return P, T, valid, kps, desc, ts[ok].min(), big
+
+
 _DEFAULT = object()   # "use the module-level knob" (scripts set STUCK_* after import)
 
 
@@ -504,7 +518,7 @@ class ScanMotionEstimator:
                  stuck_min=_DEFAULT, floor_only=_DEFAULT, elev=_DEFAULT, range_=_DEFAULT,
                  detector="sift", surf_hessian=100.0, surf_upright=False, intensity_scale=1.0,
                  gate_min_matches=None, gate_max_rotation_deg=None, gate_max_rotation_change_deg=None,
-                 save_rejected_dir=None):
+                 save_rejected_dir=None, range_motion=None, range_hessian=10.0):
         """`stuck_min`, `floor_only`, `elev`, `range_`: the stuck-match filter (#025-#027);
         left at their defaults they read the module globals STUCK_* at each call.
         `detector`, `surf_hessian`, `surf_upright`: the panorama features, see make_detector.
@@ -513,7 +527,10 @@ class ScanMotionEstimator:
         `gate_min_matches` matches support it, when its rotation over the scan exceeds `gate_max_rotation_deg`, or
         when its rotation vector differs from the last ACCEPTED one by more than `gate_max_rotation_change_deg`.
         `save_rejected_dir`: for every rejected or failed scan, both panoramas, their matches and a line in
-        rejected.csv (scan, time, reason, matches, rotation), to inspect the pairs by eye."""
+        rejected.csv (scan, time, reason, matches, rotation), to inspect the pairs by eye.
+        `range_motion` (#058): also measure the motion from the RANGE panorama (range_features, SURF threshold
+        `range_hessian`, own RNG so the intensity estimate is unchanged): "fallback" returns it when the intensity motion
+        failed or was rejected; "candidate" only keeps it in self.last_range_motion (a starting point for the ICP)."""
         self.period, self.model, self.subpixel = period, model, subpixel
         self.intensity_scale = intensity_scale
         self.stuck_min, self.floor_only, self.elev, self.range_ = stuck_min, floor_only, elev, range_
@@ -528,6 +545,13 @@ class ScanMotionEstimator:
         self.k = -1                                   # index of the current scan
         self.last_accepted_rotvec = None
         self.last_reason = None
+        self.range_motion = range_motion
+        if range_motion is not None:
+            self.range_detector = make_detector("surf", range_hessian)
+            self.range_rng = np.random.default_rng(seed + 1000)
+            self.prev_range = None
+        self.last_range_motion = None
+        self.n_range_used = 0
 
     def motion(self, xyz, ts, inten, ring):
         self.k += 1
@@ -538,6 +562,8 @@ class ScanMotionEstimator:
         prev, self.prev = self.prev, cur
         self.last_params, self.last_t_start = None, cur[5]
         if prev is None:
+            if self.range_motion is not None:
+                self._range(xyz, ts, ring, None, 0)
             return None, 0
         M0, M1, n = match_motion(prev, cur, self.period, self.rng, self.bf, self.model, self.subpixel,
                                  self.stuck_min, self.floor_only, self.elev, self.range_)
@@ -553,7 +579,24 @@ class ScanMotionEstimator:
             self.last_factor = f
         self.last_params = match_motion.last_params if M1 is not None else None
         self.last_t_start = cur[5]
-        return self._gate(M1, n, prev, cur)
+        M, n = self._gate(M1, n, prev, cur)
+        if self.range_motion is not None:
+            M, n = self._range(xyz, ts, ring, M, n)
+        return M, n
+
+    def _range(self, xyz, ts, ring, M, n):
+        """The motion from the range panorama (#058), after the intensity estimate and its gate."""
+        cur_r = range_features(xyz, ts, ring, self.range_detector)
+        prev_r, self.prev_range = self.prev_range, cur_r
+        self.last_range_motion = None
+        if prev_r is not None:
+            _, Mr, nr = match_motion(prev_r, cur_r, self.period, self.range_rng, self.bf, self.model, self.subpixel,
+                                     self.stuck_min, self.floor_only, self.elev, self.range_)
+            self.last_range_motion = Mr
+            if self.range_motion == "fallback" and M is None and Mr is not None:
+                self.n_range_used += 1
+                return Mr, nr
+        return M, n
 
     def _gate(self, M, n, prev, cur):
         """The plausibility gate (#054): None + self.last_reason for a rejected motion; saves the pair if asked."""

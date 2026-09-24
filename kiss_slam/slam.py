@@ -354,6 +354,8 @@ class KissSLAM:
         self._rotvec_history = []          # image_deskew.rotation_smoothing (#047)
         self.n_two_start = 0                # image_deskew.two_start_deg: scans registered twice (#057)
         self.n_two_start_cv_won = 0         # ... of which the constant-velocity start fitted better
+        self.two_start_log = []             # one dict per such scan (#058): fits of every start, which was kept
+        self.two_start_seconds = 0.0        # time spent on the extra registrations and the fit test
         self._image_motions = None         # precomputed (N,4,4), NaN where failed
         # Index in the sequence of the first scan fed to process_scan: the precomputed
         # file has one row per scan of the whole sequence.  SlamPipeline sets it to its
@@ -381,6 +383,8 @@ class KissSLAM:
                     gate_max_rotation_deg=self.image_cfg.gate_max_rotation_deg,
                     gate_max_rotation_change_deg=self.image_cfg.gate_max_rotation_change_deg,
                     save_rejected_dir=self.image_cfg.save_rejected_dir,
+                    range_motion=self.image_cfg.range_motion,
+                    range_hessian=self.image_cfg.range_hessian,
                     model=self.image_cfg.model,
                     subpixel=self.image_cfg.subpixel,
                     stuck_min=self.image_cfg.stuck_min,
@@ -391,6 +395,8 @@ class KissSLAM:
                     surf_hessian=self.image_cfg.surf_hessian_threshold,
                     surf_upright=self.image_cfg.surf_upright,
                 )
+                if self.image_cfg.parallel and self.image_cfg.range_motion == "candidate":
+                    raise ValueError("image_deskew.range_motion = 'candidate' needs parallel = false (#058)")
                 if self.image_cfg.parallel:
                     # "spawn": a fork would copy the parent's TBB / OpenCV thread state.  The worker
                     # gets the module knobs as they are NOW (scripts set them before building KissSLAM).
@@ -789,20 +795,38 @@ class KissSLAM:
         deskewed, source, frame_downsample, initial_guess, new_pose = register(delta, start)   # deskew from the image
         two = self.image_cfg.two_start_deg
         if two is not None and M is not None:
-            cv = odo.last_delta
-            disagree = np.degrees(np.arccos(np.clip((np.trace((np.linalg.inv(cv) @ M)[:3, :3]) - 1) / 2, -1, 1)))
-            if disagree > two:                                # (B): no deskew, constant-velocity start (#057)
-                b = register(np.eye(4), cv)
+            import time
+            t0 = time.perf_counter()
+            # Starting points (#057, #058): the image motion (already registered), the range motion if asked for, and
+            # constant velocity (no deskew).  Registered again only when some pair disagrees by more than two_start_deg.
+            cands = {"image": (M, M)}
+            Mr = self._image_motion_est.last_range_motion if (self._image_motion_est is not None and
+                                                              self.image_cfg.range_motion == "candidate") else None
+            if Mr is not None:
+                cands["range"] = (Mr, Mr)
+            cands["cv"] = (np.eye(4), odo.last_delta)
+            rot = lambda A, B: np.degrees(np.arccos(np.clip((np.trace((np.linalg.inv(A) @ B)[:3, :3]) - 1) / 2, -1, 1)))
+            starts = [c[1] for c in cands.values()]
+            disagree = max(rot(a, b) for i, a in enumerate(starts) for b in starts[i + 1:])
+            if disagree > two:
+                results = {"image": (deskewed, source, frame_downsample, initial_guess, new_pose)}
+                for name, (dsk, st) in cands.items():
+                    if name != "image":
+                        results[name] = register(dsk, st)
                 map_pts = odo.local_map.point_cloud()
                 if len(map_pts):
                     tree = KDTree(map_pts)
                     fit = lambda src, pose: float(np.minimum(tree.query(src @ pose[:3, :3].T + pose[:3, 3], workers=-1)[0],
                                                              3 * sigma).mean())
-                    fa, fb = fit(source, new_pose), fit(b[1], b[4])
+                    fits = {name: fit(r[1], r[4]) for name, r in results.items()}
+                    best = min(fits, key=fits.get)
+                    deskewed, source, frame_downsample, initial_guess, new_pose = results[best]
                     self.n_two_start += 1
-                    if fb < fa:
-                        deskewed, source, frame_downsample, initial_guess, new_pose = b
-                        self.n_two_start_cv_won += 1
+                    self.n_two_start_cv_won += best == "cv"
+                    self.two_start_log.append(dict(scan=self._frame_counter, disagree_deg=disagree, kept=best,
+                                                   **{f"fit_{k}": v for k, v in fits.items()},
+                                                   **{f"rot_{k}_deg": rot(np.eye(4), c[1]) for k, c in cands.items()}))
+            self.two_start_seconds += time.perf_counter() - t0
         if fixed_sigma is None:
             odo.adaptive_threshold.update_model_deviation(np.linalg.inv(initial_guess) @ new_pose)
         # else: sigma stays at fixed_sigma; the adaptive threshold is never updated

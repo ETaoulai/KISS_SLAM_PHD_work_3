@@ -60,7 +60,8 @@ ARMS = {"kissncd": "KISS-SLAM, kiss_icp NCD loader", "kissnodeskew": "KISS-SLAM,
         "sift": "i3 + SIFT", "surf": "i3 + SURF", "surftrans": "i3 + SURF, translation only",
         "surfrot": "i3 + SURF, rotation only", "surfsmooth3": "i3 + SURF, rotation smoothed (3)",
         "surfh25": "i3 + SURF, threshold 25", "surfh10": "i3 + SURF, threshold 10", "surfgate": "i3 + SURF, gated", "surfgate25": "i3 + SURF, gated 25/20",
-        "surfgate25id": "i3 + SURF, gated 25/20, identity fallback", "surftwo": "i3 + SURF, two starting points"}
+        "surfgate25id": "i3 + SURF, gated 25/20, identity fallback", "surftwo": "i3 + SURF, two starting points",
+        "surfrangefb": "i3 + SURF, range when intensity fails", "surftworange": "i3 + SURF, three starts (+ range)"}
 METRICS = [("ate", "ATE [m]", "{:.3f}"), ("rpe_t", "RPE 1 s [cm]", "{:.2f}"), ("rpe_r", "RPE 1 s [°]", "{:.3f}"),
            ("path", "path [m]", "{:.1f}"), ("excess", "path vs GT [%]", "{:+.1f}"), ("z_rmse", "z RMSE [m]", "{:.3f}"),
            ("kitti", "KITTI [%]", "{:.2f}"), ("fail", "image fails", "{:.0f}"), ("offset", "time shift [s]", "{:+.3f}")]

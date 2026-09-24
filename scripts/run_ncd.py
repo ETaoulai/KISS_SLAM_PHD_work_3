@@ -4,7 +4,7 @@
     python scripts/run_ncd.py <arm> <sequence> <out dir> [n_scans] [--config=<yaml>] [--seed=N] [--parallel]
                               [--topic=/os_cloud_node/points] [--intensity-scale=0.249] [--diag]
                               [--parts=full|translation|rotation] [--rot-smooth=k] [--save-frames=<voxel m>] [--save-fraction=f]
-                              [--gate [--gate-min=0] [--gate-rot=10] [--gate-drot=8]] [--fallback=identity|cv] [--two-start=<deg>]
+                              [--gate [--gate-min=0] [--gate-rot=10] [--gate-drot=8]] [--fallback=identity|cv] [--two-start=<deg>] [--range=fallback|candidate]
 
 sequence: a 2020 sequence dir with raw_format/ouster_scan/*.pcd (kiss_slam/tools/ncd_pcd.py), or a
           .bag file, or a folder whose *.bag are ONE split sequence (read in time order; 2021 bags).
@@ -70,6 +70,8 @@ def main():
             config.image_deskew.fallback = {"cv": "constant_velocity"}.get(opts["fallback"], opts["fallback"])
         if "two-start" in opts:                                  # register twice when image and CV disagree (#057)
             config.image_deskew.two_start_deg = float(opts["two-start"])
+        if "range" in opts:                                      # range-image motion: fallback | candidate (#058)
+            config.image_deskew.range_motion = opts["range"]
         if "save-frames" in opts:
             config.diagnostics.save_deskewed_voxel = float(opts["save-frames"])
             config.diagnostics.save_deskewed_fraction = float(opts.get("save-fraction", 1.0))

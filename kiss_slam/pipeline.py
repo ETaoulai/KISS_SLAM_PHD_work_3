@@ -176,6 +176,7 @@ class SlamPipeline(OdometryPipeline):
         self._write_closures()
         self._write_local_maps()
         self._write_deskewed_frames()
+        self._write_two_start_log()
         self._write_icp_metrics()
         self._plot_icp_residuals()
         self._plot_motion_and_deviation()
@@ -235,8 +236,14 @@ class SlamPipeline(OdometryPipeline):
             print(f"KissSLAM| image motion: {n - self.kiss_slam.n_image_motion_failures}/{n} scans "
                   f"({self.kiss_slam.n_image_motion_failures} fell back to identity)")
             if self.kiss_slam.n_two_start:
+                total = self.times.sum() * 1e-9
                 print(f"KissSLAM| two starting points: {self.kiss_slam.n_two_start} scans registered twice, "
-                      f"constant-velocity start kept in {self.kiss_slam.n_two_start_cv_won}")
+                      f"constant-velocity start kept in {self.kiss_slam.n_two_start_cv_won}; extra time "
+                      f"{self.kiss_slam.two_start_seconds:.1f} s of {total:.1f} s in process_scan "
+                      f"({100 * self.kiss_slam.two_start_seconds / max(total, 1e-9):.1f} %)")
+            est = self.kiss_slam._image_motion_est
+            if est is not None and getattr(est, "range_motion", None) == "fallback":
+                print(f"KissSLAM| range image used for {est.n_range_used} scans where the intensity motion failed")
 
     # ─────────────────────────────────────────────────────────────────────────
     # CSV
@@ -437,6 +444,17 @@ class SlamPipeline(OdometryPipeline):
             occupancy_2d_map_dir = os.path.join(occupancy_dir, "map2d")
             os.makedirs(occupancy_2d_map_dir, exist_ok=True)
             occupancy_grid_mapper.write_2d_occupancy_grid(occupancy_2d_map_dir)
+
+    def _write_two_start_log(self):
+        """two_start.csv: every scan registered from several starting points, their fits and the one kept (#058)."""
+        log = self.kiss_slam.two_start_log
+        if not log:
+            return
+        keys = sorted({k for row in log for k in row}, key=lambda k: (k != "scan", k))
+        with open(os.path.join(self.results_dir, "two_start.csv"), "w", newline="") as f:
+            w = csv.DictWriter(f, fieldnames=keys)
+            w.writeheader()
+            w.writerows(log)
 
     def _write_deskewed_frames(self):
         """diagnostics.save_deskewed_voxel: every scan as deskewed (sensor frame, voxel-downsampled), with
