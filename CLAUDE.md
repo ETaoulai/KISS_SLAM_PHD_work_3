@@ -42,7 +42,8 @@ log. Ένα σημείο ανά είδος πληροφορίας — μην α�
 - **Linux 2** (`photogrammetry`), conda env `kiss-slam-main`, source `/home/photogrammetry/Kiss_SLAM-main`
   (git → GitHub `ETaoulai/KISS_SLAM_PHD_work_2`, private, remote `origin`, από 25/9· ο `after_two_start` ακολουθεί τον `origin/main`. Το παλιό
   `ETaoulai/KISS_SLAM_PHD_work` είναι το remote `archive`, με τους κλάδους `main` … `gating`, σταματά στο `fa86f3b`). OpenCV χτισμένο με SURF.
-  Δεδομένα στο `/media/photogrammetry/A26C3DDF6C3DAF431/data/` (όχι στο `data/` του repo).
+  Δεδομένα στο `/media/photogrammetry/A26C3DDF6C3DAF431/data/` (όχι στο `data/` του repo). Νέα datasets (NCD 2020 long / dynamic_spinning,
+  Hilti 2021, NTU VIRAL) οργανωμένα ως σύνδεσμοι στο `/home/photogrammetry/kiss_data/` (ext4) — κατάσταση: `docs/datasets.md`.
 
 ## Δομή
 
@@ -62,6 +63,8 @@ log. Ένα σημείο ανά είδος πληροφορίας — μην α�
   Τα `evaluate_ncd.py` / `evaluate_gt.py` / `results_table.py --legacy` μόνο για αναπαραγωγή παλιών πινάκων.
 - **Βραχίονες σύγκρισης (ΑΠΟΦΑΣΗ Μ.Τ. 25/9):** KISS-SLAM · KISS-SLAM χωρίς deskew · i3 + SIFT · i3 + SURF · i3 + SURF δύο αρχές · δύο αρχές με
   περιθώριο αλλαγής 2 % / 4 % (#062). Όχι indoor_detail, όχι ablations (εξομάλυνση στροφής, μόνο μετατόπιση) — `results_table.py --all-arms` για όλα.
+- `scripts/evaluate_hilti.py` — επίσημο πρωτόκολλο του Hilti SLAM Challenge 2021 (τροχιά IMU, pole/prism/imu, 1 s, SE(3), APE)· `docs/datasets.md`.
+- `scripts/evaluate_ntu.py` — επίσημο πρωτόκολλο του NTU VIRAL (σώμα + πρίσμα 0.40 m, 0.05 s, SE(3), ATE, πληρότητα)· `docs/datasets.md`.
 - `scripts/eval_motion_npz.py` — σφάλμα ενός αποθηκευμένου npz κίνησης έναντι GT, χωρίς επανεκτίμηση.
 - `scripts/measure_variance.sh` — διασπορά της μεθόδου (4 σπόροι × 2 τρόποι κατασκευής)· **τρέξ' το πριν από κάθε σύγκριση**.
 - `scripts/analyze_rig_mask.py` — τι είναι καρφωμένο στον σαρωτή (σκιές διάταξης, σιλουέτα χειριστή).

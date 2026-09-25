@@ -1,0 +1,71 @@
+# Δεδομένα για δοκιμές — τι υπάρχει, πού, τι λείπει (25/9/2026)
+
+Τα αρχεία μένουν όπου κατέβηκαν, στον δίσκο δεδομένων (NTFS, `/media/photogrammetry/A26C3DDF6C3DAF431/data/`, **μόνο ανάγνωση**, #046).
+Η οργάνωση είναι **δέντρο συνδέσμων στο ext4**: `/home/photogrammetry/kiss_data/` — καμία εγγραφή στον NTFS, αναστρέψιμο, και ο reader
+ανοίγει τους συνδέσμους κανονικά (π.χ. τα 16 bags του long experiment διαβάζονται ως μία ακολουθία, σε σειρά χρόνου, 26 560 σαρώσεις).
+Οι παλιές ακολουθίες (Newer College 2020 01_short, 2021, Oxford Spires) μένουν στις διαδρομές του `scripts/results_table.py`.
+
+## Νέες ακολουθίες
+
+| Dataset | Ακολουθία | Φάκελος (`kiss_data/…`) | LiDAR / topic | Διάρκεια | GT | Κατάσταση |
+|---|---|---|---|---|---|---|
+| Newer College 2020 | 02_long_experiment | `newer_college/2020/02_long_experiment/rosbag/` (16 bags) | OS1-64, `/os1_cloud_node/points` | 2657 s, 26 560 σαρώσεις | `ground_truth/registered_poses.csv`, πλήρης τροχιά (= το ήδη υπάρχον αρχείο) | **έτοιμη** (`--frame=ncd2020`) |
+| Newer College 2020 | dynamic_spinning | `newer_college/2020/dynamic_spinning/rosbag/` | OS1-64, `/os1_cloud_node/points` | 120 s, 1202 | `registered_poses.csv` + **`time_offsets.csv`** (53–57 ms, του dataset) | έτοιμη· απόφαση για το time offset |
+| Hilti 2021 | LAB_Survey_2 | `hilti_2021/LAB_Survey_2/` | OS0-64 (2048 στήλες), `/os_cloud_node/points` | 136 s, 1357 | πυκνή τροχιά, **στο σύστημα του IMU** | **έτοιμη** (`evaluate_hilti.py`) |
+| Hilti 2021 | UZH_Tracking_Area_Run_2 | `hilti_2021/UZH_Tracking_Area_Run_2/` | ίδιο | 89 s, 895 | πυκνή τροχιά, σύστημα IMU | **έτοιμη** |
+| Hilti 2021 | Basement_1 | `hilti_2021/Basement_1/` | ίδιο | 113 s, 1130 | 5 σημεία ελέγχου (pole) | **έτοιμη** (`evaluate_hilti.py`, σημεία ελέγχου) |
+| Hilti 2021 | IC_Office_1 | `hilti_2021/IC_Office_1/` | ίδιο | 200 s, 2004 | 13 σημεία ελέγχου | **έτοιμη** |
+| Hilti 2021 | Office_Mitte_1 | `hilti_2021/Office_Mitte_1/` | ίδιο | 264 s, 2641 | 8 σημεία ελέγχου | **έτοιμη** |
+| Hilti 2021 | Construction_Site_1 | `hilti_2021/Construction_Site_1/` | ίδιο | 200 s, 1995 | 10 θέσεις πρίσματος | **έτοιμη** |
+| NTU VIRAL | eee_03 | `ntu_viral/eee_03/` (αποσυμπιεσμένο στο ext4) | δύο OS1-16: `/os1_cloud_node1/points` (οριζόντιος), `…node2…` (κατακόρυφος) | — | επίσημο GT `ntuviral_gt/eee_03/ground_truth.csv` (πρίσμα Leica), **σώμα → πρίσμα 0.40 m** | **έτοιμη** (`evaluate_ntu.py`) |
+| NTU VIRAL | eee_01, eee_02 | `ntu_viral/eee_01/`, `ntu_viral/eee_02/` (ext4, 9.3 + 7.5 GB) | ίδιο | — | ίδιο | **έτοιμες** |
+
+Έλεγχοι (25/9): κάθε bag ανοίγει (δείκτης ROS1 στο τέλος → όχι κομμένο)· τα 16 bags του long experiment είναι συνεχόμενα (επικάλυψη 0.04 s
+μεταξύ τμημάτων) και οι σαρώσεις τους (26 560) = οι θέσεις του GT· πεδία σημείων όπως στα bags του 2021 (`t` σχετικός, 0–99.9 ms·
+intensity 0–~1100 → κλίμακα ×255/1024, #041). Hilti: intensity έως ~4500 (p99 443).
+
+## Εντολές (όταν είναι έτοιμες)
+
+```bash
+python scripts/run_ncd.py surf /home/photogrammetry/kiss_data/newer_college/2020/02_long_experiment/rosbag <out> --topic=/os1_cloud_node/points
+python scripts/evaluate_official.py /home/photogrammetry/kiss_data/newer_college/2020/02_long_experiment/ground_truth/registered_poses.csv <out> --frame=ncd2020
+python scripts/run_ncd.py surf /home/photogrammetry/kiss_data/hilti_2021/LAB_Survey_2/rosbag <out> --topic=/os_cloud_node/points
+```
+Έξοδοι πάντα στο `/home/photogrammetry/kiss_runs/` (ext4).
+
+## Hilti 2021: επίσημη αξιολόγηση (`scripts/evaluate_hilti.py`, 25/9)
+Αναπαράγει το `evaluation-evo/evaluation.py` του `Hilti-Research/hilti-slam-challenge-2021`: τροχιά του **IMU**, × `T_imu_ref` ανάλογα με την
+κατάληξη του αρχείου GT (`_pole` άκρη του κονταριού 1.67 m, `_prism` 0.27 m, `_imu` ταυτοτικός), αντιστοίχιση εντός 1 s, SE(3), APE θέσης.
+Βαθμονόμηση: `kiss_data/hilti_2021/calibration.yaml` (Hugging Face `Hilti-Research/hilti-slam-challenge-2021`, 5.4 KB, «Calibration V2
+26.08.2021»)· LiDAR (`os_sensor`) → IMU: περιστροφή ~180° γύρω από το x, 13 cm.
+Έλεγχοι: ίδια νούμερα με το επίσημο script σε όλα τα παραδείγματά του (pole, prism, δύο πυκνά IMU — ως το τελευταίο ψηφίο)· η μετατροπή
+LiDAR→IMU επιβεβαιώνεται από τη στροφή (με βαθμονόμηση 0.7° / 1.5° διάμεσο σφάλμα, χωρίς 179.7°).
+Πρώτα runs (SURF δύο αρχές, 1 σπόρος): LAB_Survey_2 APE 0.035 m (παράδειγμα του dataset hdl_graph_slam 0.053)· UZH_Tracking_Area_Run_2 0.503 m
+με αιχμή 9.8 m — η εικόνα αποτυγχάνει σε 453 / 895 σαρώσεις (να εξεταστεί).
+
+```bash
+python scripts/evaluate_hilti.py /home/photogrammetry/kiss_data/hilti_2021/<seq>/ground_truth/<seq>_<pole|prism|imu>.txt <run dir> --out=<dir>
+```
+
+## NTU VIRAL: επίσημη αξιολόγηση (`scripts/evaluate_ntu.py`, 25/9)
+Αναπαράγει το `ntuviral_evaluate.ipynb` του tutorial (ntu-aris.github.io/ntu_viral_dataset/evaluation_tutorial.html): τροχιά του **σώματος**
+(= IMU) εντός του χρόνου του GT, + μετατόπιση **σώμα → πρίσμα (−0.294, −0.012, −0.273) m = 0.40 m** («πολλοί χρήστες ξεχνούν» τη, κατά τη
+σελίδα του dataset), αντιστοίχιση εντός 0.05 s, SE(3), ATE = RMSE θέσης· πληρότητα < 90 % με ATE < 20 m → ∞. GT: `kiss_data/ntu_viral/ntuviral_gt/`
+(github `ntu-aris/ntuviral_gt`, 4.9 MB, όλες οι 18 ακολουθίες). LiDAR: ο οριζόντιος OS1-16 (`/os1_cloud_node1/points`), `T_Body_Lidar` από
+`lidar_horz.yaml`. Έλεγχος: ίδια νούμερα με το επίσημο notebook στα 18 δείγματα FAST-LIO2 του dataset (μέγιστη διαφορά 4·10⁻¹⁶ m).
+Πρώτα runs, eee_03 (1 σπόρος): SURF δύο αρχές **ATE 0.548 m**, KISS 0.864 m (το δείγμα FAST-LIO2 του dataset, LiDAR + IMU: 0.102 m)· η εικόνα
+των 16 γραμμών αποτυγχάνει στο 31 % των σαρώσεων (566 / 1814).
+
+```bash
+python scripts/evaluate_ntu.py eee_03 <run dir> --out=<dir>
+```
+
+## Τι χρειάζεται πριν από τα τεστ
+1. ~~Hilti 2021: βαθμονόμηση + script~~ — έγινε 25/9 (πάνω). Το πανόραμα 64 × 2048 περνά σε 1024 στήλες (τα σημεία ανά στήλη ↓, λειτουργεί).
+   Ανοιχτό: γιατί αποτυγχάνει η εικόνα στο UZH_Tracking_Area_Run_2.
+2. **dynamic_spinning:** το `time_offsets.csv` είναι η επίσημη χρονική διόρθωση του dataset (LiDAR ↔ GT)· απόφαση αν εφαρμόζεται (δεν είναι
+   αναζήτηση μετατόπισης, #061).
+3. ~~NTU VIRAL: script αξιολόγησης~~ — έγινε 25/9 (πάνω). Ανοιχτό: η εικόνα 16 γραμμών (31 % αποτυχίες)· eee_01/02 αποσυμπιεσμένες 25/9. Δίσκος συστήματος: 31 GB ελεύθερα. (Σελίδα του dataset: «πολλοί ξεχνούν τη μετατόπιση 0.4 m από το IMU στο πρίσμα, όπου
+   μετράται το GT»· `leica_prism.yaml`: T_Body_Prism = (−0.294, −0.012, −0.273) m)· GT = `/leica/pose/relative` μέσα στο bag· δύο OS1-16, 16 ακτίνες
+   = πανόραμα 16 γραμμών, πιθανό όριο της μεθόδου. eee_01/02: αποσυμπίεση στο ext4 μόλις τελειώσει η λήψη (47 GB ελεύθερα στο ext4).
+4. Προσθήκη στο `scripts/results_table.py` (SEQUENCES) όταν υπάρχουν runs.
