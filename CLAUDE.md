@@ -9,6 +9,8 @@
 Το §7β της σύνοψης έχει τα νεότερα ευρήματα (#033–#039) — **πρώτο απ' όλα: το ATE ενός run δεν είναι μετρήσιμο
 μέγεθος** (σ = 0.02–0.04 m), οπότε κάθε σύγκριση γίνεται με RPE/μήκος διαδρομής ή με 4+ runs.
 
+**Εκκρεμότητες και ανοιχτά προβλήματα (25/9): [`docs/open_tasks.md`](docs/open_tasks.md)** — από εκεί ξεκινά η επόμενη δουλειά.
+
 Μετά το [`docs/experiment_log.md`](docs/experiment_log.md), που περιέχει:
 - τον **Οδηγό εκτέλεσης** (πού/πώς τρέχει το pipeline, όλες οι CLI παράμετροι & config),
 - το **ιστορικό πειραμάτων** αναλυτικά (Στόχος → Μέθοδος → Αποτέλεσμα → Συμπέρασμα, νεότερα πρώτα).
@@ -38,7 +40,7 @@ log. Ένα σημείο ανά είδος πληροφορίας — μην α�
 - **macOS arm64**, conda env `kissslam`. ⚠️ Απαιτεί `scikit-build-core<1.0` και numpy
   χτισμένο με OpenBLAS (όχι Accelerate).
 - **Linux 2** (`photogrammetry`), conda env `kiss-slam-main`, source `/home/photogrammetry/Kiss_SLAM-main`
-  (git → GitHub `ETaoulai/KISS_SLAM_PHD_work`, private· κλάδοι `main`, `fast_test`). OpenCV χτισμένο με SURF.
+  (git → GitHub `ETaoulai/KISS_SLAM_PHD_work`, private· κλάδοι `main` … `gating`, τρέχων κλάδος εργασίας `after_two_start` από 25/9). OpenCV χτισμένο με SURF.
   Δεδομένα στο `/media/photogrammetry/A26C3DDF6C3DAF431/data/` (όχι στο `data/` του repo).
 
 ## Δομή
