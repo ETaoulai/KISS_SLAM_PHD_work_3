@@ -1,6 +1,6 @@
 # Results against the ground truth — official protocol (evo), poses at their own instant
 
-Oxford Spires benchmark protocol: `evo_ape tum gt_lidar.txt est.txt --align --t_max_diff 0.01` (APE = translation RMSE after a rigid SE(3) alignment, association within 10 ms, no time offset); RPE with evo over 1 m (all pairs, pairs from the reference) and over 1 s (same relative error, all pairs, pairs by time: evo has no time step).  Every pose is stamped with the instant it stands for (scripts/evaluate_official.py): scan stamp = first point of the sweep; deskewed scan = last point (+0.1 s); raw scan (no deskew) = mean point time (+0.05 s).  No search over time shifts (#045/#046 closed).  Poses without a GT sample within 10 ms are dropped, as evo does (Oxford Spires has GT at ~77 % of the scan stamps plus a 20 Hz grid).  GT interp. = 1: the GT is interpolated at the pose times (fewer than half associate: no-deskew poses fall between the GT samples).  
+Oxford Spires benchmark protocol: `evo_ape tum gt_lidar.txt est.txt --align --t_max_diff 0.01` (APE = translation RMSE after a rigid SE(3) alignment, association within 10 ms, no time offset); RPE with evo over 1 m (all pairs, pairs from the reference) and over 1 s (same relative error, all pairs, pairs by time: evo has no time step).  Every pose is stamped with the instant it stands for (scripts/evaluate_official.py): scan stamp = first point of the sweep; deskewed scan = last point (+0.1 s); raw scan (no deskew) = mean point time (+0.05 s).  No search over time shifts (#045/#046 closed).  Poses without a GT sample within 10 ms are dropped, as evo does (Oxford Spires has GT at ~77 % of the scan stamps plus a 20 Hz grid).  Hilti 2021 and NTU VIRAL: the APE column is the dataset's own official score (Hilti SLAM Challenge 2021: APE of the IMU / pole tip / prism, scripts/evaluate_hilti.py; NTU VIRAL: ATE of the prism, scripts/evaluate_ntu.py), assoc. = control points matched (Hilti, sparse GT) / completeness (NTU); the other columns stay empty.  GT interp. = 1: the GT is interpolated at the pose times (fewer than half associate: no-deskew poses fall between the GT samples).  
 KISS-SLAM default config (the setting of the KISS-SLAM paper), except the arms "KISS-SLAM, indoor_detail" (configs/indoor_detail.yaml: voxel 0.25 m, max range 50 m, local maps 15 m) and "KISS-SLAM, no deskew" (configs/kiss_paper_nodeskew.yaml: paper config, deskew off).  Mean ± σ over the runs of each arm (KISS-SLAM is deterministic: its runs are identical).  *Best value per sequence in bold* (lower is better; path: closest to the GT).  Per CLAUDE.md, judge by RPE and path length: the ATE of a single run is not a measurement (#037).
 
 | Dataset | Sequence (GT path) | Arm | runs | APE [m] | RPE 1 m [cm] | RPE 1 m [°] | RPE 1 s [cm] | RPE 1 s [°] | path [m] | path vs GT [%] | z RMSE [m] | image fails | assoc. | pose − stamp [s] | GT interp. |
@@ -117,3 +117,58 @@ KISS-SLAM default config (the setting of the KISS-SLAM paper), except the arms "
 |  |  | i3 + SURF, two starting points | 4 | 0.513 ± 0.087 | 9.69 ± 0.04 | 1.147 ± 0.010 | 9.69 ± 0.10 | 1.179 ± 0.011 | 803.2 ± 1.2 | +18.9 ± 0.2 | 0.497 ± 0.089 | 19 ± 3 | 0.64 ± 0.00 | +0.0999 | 0 |
 |  |  | i3 + SURF, two starting points, margin 2 % | 4 | 0.487 ± 0.082 | **9.62 ± 0.09** | 1.145 ± 0.009 | **9.63 ± 0.11** | 1.176 ± 0.010 | 803.2 ± 0.8 | **+18.8 ± 0.1** | 0.469 ± 0.083 | 19 ± 3 | 0.64 ± 0.00 | +0.0997 ± 0.0000 | 0 |
 |  |  | i3 + SURF, two starting points, margin 4 % | 4 | 0.491 ± 0.056 | 9.69 ± 0.10 | 1.151 ± 0.011 | 9.67 ± 0.10 | 1.181 ± 0.011 | 803.8 ± 1.3 | +18.9 ± 0.2 | 0.473 ± 0.058 | 19 ± 3 | 0.64 ± 0.00 | +0.0997 ± 0.0000 | 0 |
+| Newer College 2020 | 02_long_experiment (3067 m) | KISS-SLAM | 1 | **1.275** | 27.72 | 3.661 | 27.76 | 3.488 | 5695.1 | +85.7 | 1.170 | — | 1.00 | +0.0999 | 0 |
+|  |  | KISS-SLAM, no deskew | 1 | 3.498 | 11.65 | **2.293** | **11.22** | **1.999** | 3804.1 | +37.4 | 3.352 | — | 1.00 | +0.0513 | 1 |
+|  |  | i3 + SIFT | 4 | 1.276 ± 0.676 | 11.82 ± 0.02 | 2.881 ± 0.003 | 11.72 ± 0.02 | 2.585 ± 0.001 | 3513.8 ± 2.2 | +14.8 ± 0.1 | **1.034 ± 0.904** | 152 ± 3 | 0.99 ± 0.00 | +0.0999 | 0 |
+|  |  | i3 + SURF | 4 | 2.020 ± 0.075 | 11.57 ± 0.01 | 2.876 ± 0.002 | 11.51 ± 0.02 | 2.583 ± 0.002 | 3469.3 ± 4.5 | +13.2 ± 0.2 | 1.833 ± 0.142 | 30 ± 3 | 1.00 ± 0.00 | +0.0999 | 0 |
+|  |  | i3 + SURF, two starting points | 4 | 2.113 ± 0.202 | **11.54 ± 0.01** | 2.874 ± 0.001 | 11.48 ± 0.01 | 2.578 ± 0.000 | 3463.9 ± 2.3 | **+13.0 ± 0.1** | 2.061 ± 0.167 | 30 ± 3 | 1.00 ± 0.00 | +0.0999 | 0 |
+| Newer College 2020 | dynamic_spinning (92 m) | KISS-SLAM | 1 | **0.159** | **19.25** | 4.076 | **18.28** | 3.983 | 140.5 | +52.6 | 0.090 | — | 1.00 | +0.0999 | 0 |
+|  |  | KISS-SLAM, no deskew | 1 | 20.751 | 1022.81 | 30.517 | 1014.59 | 28.391 | 1814.1 | +1995.8 | 15.227 | — | 1.00 | +0.0473 | 1 |
+|  |  | i3 + SIFT | 4 | 1.390 ± 0.190 | 29.96 ± 1.74 | 4.149 ± 0.077 | 27.45 ± 2.34 | 3.726 ± 0.054 | 127.2 ± 4.6 | +42.3 ± 5.1 | 0.271 ± 0.128 | 129 ± 2 | 0.89 ± 0.00 | +0.0998 ± 0.0000 | 0 |
+|  |  | i3 + SURF | 4 | 0.774 ± 0.134 | 21.42 ± 1.80 | 3.495 ± 0.139 | 20.73 ± 1.65 | 3.290 ± 0.114 | 112.8 ± 1.8 | +24.2 ± 2.0 | 0.305 ± 0.127 | 72 ± 0 | 0.94 ± 0.00 | +0.0999 ± 0.0000 | 0 |
+|  |  | i3 + SURF, two starting points | 4 | 0.460 ± 0.139 | 20.21 ± 0.88 | **3.333 ± 0.062** | 19.26 ± 0.70 | **3.110 ± 0.038** | 106.4 ± 1.3 | **+17.7 ± 1.6** | **0.086 ± 0.039** | 72 ± 0 | 0.93 ± 0.00 | +0.0999 ± 0.0000 | 0 |
+| Hilti 2021 | Basement_1 | KISS-SLAM | 1 | 0.055 | — | — | — | — | — | — | — | — | 1.00 | — | — |
+|  |  | KISS-SLAM, no deskew | 1 | 0.078 | — | — | — | — | — | — | — | — | 1.00 | — | — |
+|  |  | i3 + SIFT | 4 | 0.056 ± 0.003 | — | — | — | — | — | — | — | 300 ± 2 | 1.00 | — | — |
+|  |  | i3 + SURF | 4 | **0.049 ± 0.013** | — | — | — | — | — | — | — | 31 ± 1 | 1.00 | — | — |
+|  |  | i3 + SURF, two starting points | 4 | 0.058 ± 0.010 | — | — | — | — | — | — | — | 31 ± 1 | 1.00 | — | — |
+| Hilti 2021 | IC_Office_1 | KISS-SLAM | 1 | 6.344 | — | — | — | — | — | — | — | — | 1.00 | — | — |
+|  |  | KISS-SLAM, no deskew | 1 | 1.655 | — | — | — | — | — | — | — | — | 1.00 | — | — |
+|  |  | i3 + SIFT | 4 | 0.098 ± 0.017 | — | — | — | — | — | — | — | 104 ± 3 | 1.00 | — | — |
+|  |  | i3 + SURF | 4 | 0.072 ± 0.002 | — | — | — | — | — | — | — | 6 ± 1 | 1.00 | — | — |
+|  |  | i3 + SURF, two starting points | 4 | **0.072 ± 0.006** | — | — | — | — | — | — | — | 6 ± 1 | 1.00 | — | — |
+| Hilti 2021 | Office_Mitte_1 | KISS-SLAM | 1 | 4.286 | — | — | — | — | — | — | — | — | 1.00 | — | — |
+|  |  | KISS-SLAM, no deskew | 1 | **0.575** | — | — | — | — | — | — | — | — | 1.00 | — | — |
+|  |  | i3 + SIFT | 4 | 4.400 ± 0.908 | — | — | — | — | — | — | — | 304 ± 4 | 1.00 | — | — |
+|  |  | i3 + SURF | 4 | 1.147 ± 1.154 | — | — | — | — | — | — | — | 20 ± 1 | 1.00 | — | — |
+|  |  | i3 + SURF, two starting points | 4 | 1.437 ± 1.208 | — | — | — | — | — | — | — | 20 ± 1 | 1.00 | — | — |
+| Hilti 2021 | Construction_Site_1 | KISS-SLAM | 1 | 0.063 | — | — | — | — | — | — | — | — | 1.00 | — | — |
+|  |  | KISS-SLAM, no deskew | 1 | 0.062 | — | — | — | — | — | — | — | — | 1.00 | — | — |
+|  |  | i3 + SIFT | 4 | 0.058 ± 0.007 | — | — | — | — | — | — | — | 1193 ± 2 | 1.00 | — | — |
+|  |  | i3 + SURF | 4 | 0.050 ± 0.004 | — | — | — | — | — | — | — | 481 ± 2 | 1.00 | — | — |
+|  |  | i3 + SURF, two starting points | 4 | **0.049 ± 0.004** | — | — | — | — | — | — | — | 481 ± 2 | 1.00 | — | — |
+| Hilti 2021 | LAB_Survey_2 | KISS-SLAM | 1 | 0.062 | — | — | — | — | — | — | — | — | — | — | — |
+|  |  | KISS-SLAM, no deskew | 1 | 0.050 | — | — | — | — | — | — | — | — | — | — | — |
+|  |  | i3 + SIFT | 4 | 0.037 ± 0.000 | — | — | — | — | — | — | — | 2 ± 1 | — | — | — |
+|  |  | i3 + SURF | 4 | **0.036 ± 0.001** | — | — | — | — | — | — | — | 1 | — | — | — |
+|  |  | i3 + SURF, two starting points | 4 | 0.036 ± 0.001 | — | — | — | — | — | — | — | 1 | — | — | — |
+| Hilti 2021 | UZH_Tracking_Area_Run_2 | KISS-SLAM | 1 | 0.585 | — | — | — | — | — | — | — | — | — | — | — |
+|  |  | KISS-SLAM, no deskew | 1 | **0.204** | — | — | — | — | — | — | — | — | — | — | — |
+|  |  | i3 + SIFT | 4 | 1.289 ± 0.523 | — | — | — | — | — | — | — | 678 ± 3 | — | — | — |
+|  |  | i3 + SURF | 4 | 0.506 ± 0.000 | — | — | — | — | — | — | — | 450 ± 4 | — | — | — |
+|  |  | i3 + SURF, two starting points | 4 | 0.503 ± 0.000 | — | — | — | — | — | — | — | 450 ± 4 | — | — | — |
+| NTU VIRAL | eee_01 | KISS-SLAM | 1 | 2.678 | — | — | — | — | — | — | — | — | 1.00 | — | — |
+|  |  | KISS-SLAM, no deskew | 1 | 2.363 | — | — | — | — | — | — | — | — | 1.00 | — | — |
+|  |  | i3 + SIFT | 4 | **1.400 ± 0.172** | — | — | — | — | — | — | — | 1327 ± 9 | 1.00 | — | — |
+|  |  | i3 + SURF | 4 | 1.964 ± 0.094 | — | — | — | — | — | — | — | 1039 ± 2 | 1.00 | — | — |
+|  |  | i3 + SURF, two starting points | 4 | 2.028 ± 0.098 | — | — | — | — | — | — | — | 1039 ± 2 | 1.00 | — | — |
+| NTU VIRAL | eee_02 | KISS-SLAM | 1 | 1.486 | — | — | — | — | — | — | — | — | 1.00 | — | — |
+|  |  | KISS-SLAM, no deskew | 1 | 1.490 | — | — | — | — | — | — | — | — | 1.00 | — | — |
+|  |  | i3 + SIFT | 4 | 3.952 ± 2.174 | — | — | — | — | — | — | — | 1044 ± 3 | 1.00 | — | — |
+|  |  | i3 + SURF | 4 | 0.880 ± 0.191 | — | — | — | — | — | — | — | 646 ± 6 | 1.00 | — | — |
+|  |  | i3 + SURF, two starting points | 4 | **0.820 ± 0.073** | — | — | — | — | — | — | — | 646 ± 6 | 1.00 | — | — |
+| NTU VIRAL | eee_03 | KISS-SLAM | 1 | 0.864 | — | — | — | — | — | — | — | — | 1.00 | — | — |
+|  |  | KISS-SLAM, no deskew | 1 | 0.841 | — | — | — | — | — | — | — | — | 1.00 | — | — |
+|  |  | i3 + SIFT | 4 | **0.471 ± 0.043** | — | — | — | — | — | — | — | 786 ± 3 | 1.00 | — | — |
+|  |  | i3 + SURF | 4 | 0.540 ± 0.034 | — | — | — | — | — | — | — | 562 ± 6 | 1.00 | — | — |
+|  |  | i3 + SURF, two starting points | 4 | 0.592 ± 0.041 | — | — | — | — | — | — | — | 562 ± 6 | 1.00 | — | — |
