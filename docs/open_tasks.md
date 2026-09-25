@@ -69,10 +69,12 @@
 
 ## Ε. Νοικοκυριό
 
-- **Δίσκος συστήματος 97 % γεμάτος (26 GB ελεύθερα, 25/9).** Τα runs στο `/home/photogrammetry/kiss_runs/` (6.3 GB) μεταφέρονται στον δίσκο
+- **Δίσκος συστήματος 94 % γεμάτος (53 GB ελεύθερα, 25/9 βράδυ· 97 % / 26 GB το πρωί).** Τα runs στο `/home/photogrammetry/kiss_runs/` (6.3 GB) μεταφέρονται στον δίσκο
   δεδομένων **μόνο με επαληθευμένο αντίγραφο** (rsync + cmp)· ο NTFS μένει κατά τα άλλα μόνο για ανάγνωση (kernel BUG του ntfs3,
   #046/#052). Πριν από μεγάλα runs: `df -h /home`· μετά: `journalctl -k -b | grep "kernel BUG"`.
-- Τα scripts ανάλυσης του #058–#060 (`analyse_058.py`, `analyse_bodleian.py`) είναι στο `/home/photogrammetry/kiss_runs/`, όχι στο repo —
-  να μπουν στο `scripts/` αν χρειαστούν ξανά.
+- Τα scripts ανάλυσης του #058–#060 (`analyse_058.py`, `analyse_bodleian.py`) αντιγράφηκαν στο `scripts/` (25/9) όπως ήταν — έχουν
+  καρφωμένες διαδρομές του Linux 2· αν ξαναχρησιμοποιηθούν, διαδρομές σε ορίσματα.
+- **Νέο αποθετήριο `ETaoulai/KISS_SLAM_PHD_work_2` (25/9):** ο `after_two_start` ως `main`. Να αποφασίσει ο Μ.Τ. αν γίνεται το κύριο
+  (τότε `origin` → νέο, το παλιό ως αρχείο) ή μένει αντίγραφο.
 - Γιατί το christ-church-03 τρέχει 3× πιο αργά (#031)· το KD-tree του ελέγχου των δύο αρχών (δική μας προσθήκη, βλ. CLAUDE.md).
 - Πρόσβαση του Μ.Τ. στο GitHub (`ETaoulai/KISS_SLAM_PHD_work`, private).
