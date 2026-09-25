@@ -356,6 +356,13 @@ class KissSLAM:
         self.n_two_start_cv_won = 0         # ... of which the constant-velocity start fitted better
         self.two_start_log = []             # one dict per such scan (#058): fits of every start, which was kept
         self.two_start_seconds = 0.0        # time spent on the extra registrations and the fit test
+        # Instant of the sweep each pose stands for, as a fraction of the sweep (0 = first point, 1 = last).
+        # A scan deskewed with a motion is expressed at its last point (kiss_icp 1.3.0: exp((s - 1) log delta));
+        # a scan registered raw (no deskew, identity motion) is a blur, fitted near its mean point time.  The
+        # pipeline turns this into the pose's time for the evaluation (pose_times.csv, *_posetime_tum.txt).
+        self.pose_time_fractions = []
+        self.sweep_spans = []               # last - first point time of each scan, in the reader's own unit
+        self._kept_deskew_delta = None      # deskew motion of the result kept by _register_frame_image_motion
         self._image_motions = None         # precomputed (N,4,4), NaN where failed
         # Index in the sequence of the first scan fed to process_scan: the precomputed
         # file has one row per scan of the whole sequence.  SlamPipeline sets it to its
@@ -501,6 +508,7 @@ class KissSLAM:
             current_pose = self.odometry.last_pose
             source_filtered = source[keep_mask]
             self._has_intensity = True
+            self._record_pose_time(frame, timestamps, deskew_delta if self.odometry.config.data.deskew else None)
         else:
             if self.use_image_deskew:
                 deskewed_frame, source = self._register_frame_image_motion(
@@ -512,6 +520,11 @@ class KissSLAM:
                 deskewed_frame, source = self.odometry.register_frame(frame, timestamps)
             current_pose = self.odometry.last_pose
             source_filtered = source
+            if self.use_image_deskew:
+                used_delta = self._kept_deskew_delta
+            else:
+                used_delta = deskew_delta if self.odometry.config.data.deskew else None
+            self._record_pose_time(frame, timestamps, used_delta)
             if use_int:
                 intensity, source_intensity, keep_mask = self._select_by_intensity(
                     frame, timestamps, intensity, deskew_delta, deskewed_frame, source
@@ -793,6 +806,7 @@ class KissSLAM:
             return deskewed_, source_, frame_downsample_, guess_, pose_
 
         deskewed, source, frame_downsample, initial_guess, new_pose = register(delta, start)   # deskew from the image
+        kept_delta = delta
         two = self.image_cfg.two_start_deg
         if two is not None and M is not None:
             import time
@@ -821,6 +835,7 @@ class KissSLAM:
                     fits = {name: fit(r[1], r[4]) for name, r in results.items()}
                     best = min(fits, key=fits.get)
                     deskewed, source, frame_downsample, initial_guess, new_pose = results[best]
+                    kept_delta = delta if best == "image" else cands[best][0]
                     self.n_two_start += 1
                     self.n_two_start_cv_won += best == "cv"
                     from scipy.spatial.transform import Rotation as _R
@@ -840,7 +855,33 @@ class KissSLAM:
         odo.local_map.update(frame_downsample, new_pose)
         odo.last_delta = np.linalg.inv(odo.last_pose) @ new_pose
         odo.last_pose = new_pose
+        self._kept_deskew_delta = kept_delta
         return deskewed, source
+
+    def _record_pose_time(self, frame, timestamps, deskew_delta):
+        t = np.asarray(timestamps, dtype=np.float64).ravel()
+        self.pose_time_fractions.append(self._pose_time_fraction(frame, t, deskew_delta))
+        self.sweep_spans.append(float(t.max() - t.min()) if len(t) else np.nan)
+
+    def _pose_time_fraction(self, frame, timestamps, deskew_delta):
+        """Instant of the sweep the registered pose stands for (0 = first point, 1 = last point).
+
+        deskew_delta: the motion the scan was deskewed with, None when deskew is off.  kiss_icp 1.3.0 expresses a
+        deskewed scan at its last point (Preprocessing.cpp: exp((s - 1) log delta), s the point time normalised to
+        [0, 1]), so its pose is the sensor at s = 1.  With no motion (deskew off, identity fallback, the constant-
+        velocity start of two_start, the first scans) the points stay where they were measured and the rigid fit of
+        the blur lands near their mean time: the mean normalised time of the points inside the range crop.
+        """
+        if deskew_delta is not None and not np.allclose(deskew_delta, np.eye(4), atol=1e-12):
+            return 1.0
+        t = np.asarray(timestamps, dtype=np.float64).ravel()
+        if len(t) != len(frame) or t.max() <= t.min():
+            return 0.5
+        s = (t - t.min()) / (t.max() - t.min())
+        r = np.linalg.norm(frame, axis=1)
+        data = self.odometry.config.data
+        keep = (r > data.min_range) & (r < data.max_range)
+        return float(s[keep].mean()) if keep.any() else 0.5
 
     def _refresh_diag_tree(self):
         """Rebuild the diagnostics KDTree at most every `rebuild_every` frames."""

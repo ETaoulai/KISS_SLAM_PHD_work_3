@@ -31,6 +31,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 from kiss_icp.pipeline import OdometryPipeline
+from scipy.spatial.transform import Rotation
 from tqdm import tqdm, trange
 
 from kiss_slam.config import load_config
@@ -168,6 +169,7 @@ class SlamPipeline(OdometryPipeline):
         self._evaluate_closures()
         self._create_output_dir()
         self._write_result_poses()
+        self._write_pose_times()
         self._write_gt_poses()
         self._write_cfg()
         self._write_slam_cfg()
@@ -444,6 +446,36 @@ class SlamPipeline(OdometryPipeline):
             occupancy_2d_map_dir = os.path.join(occupancy_dir, "map2d")
             os.makedirs(occupancy_2d_map_dir, exist_ok=True)
             occupancy_grid_mapper.write_2d_occupancy_grid(occupancy_2d_map_dir)
+
+    def _write_pose_times(self):
+        """pose_times.csv and *_poses_posetime_tum.txt: every pose at the instant of the sweep it stands for.
+
+        The *_poses_tum.txt of upstream stamps each pose with its scan's stamp, which on the Hesai / Ouster bags and
+        the Newer College 2020 pcds is the FIRST point of the sweep (measured, 25/9), while a deskewed scan is
+        expressed at its LAST point (KissSLAM.pose_time_fractions).  Here pose time = stamp + fraction x the scan's
+        own point-time span, the convention of the ground truth of Oxford Spires and Newer College (a pose at the
+        instant of its stamp), so the official evaluation (evo_ape, no time offset) compares like with like.  The
+        span comes in the reader's unit (Hesai s, Ouster bag ns, 2020 pcd s): converted by the power of ten that
+        brings it closest to the gap between stamps.
+        """
+        fractions = np.asarray(self.kiss_slam.pose_time_fractions, dtype=np.float64)
+        spans = np.asarray(self.kiss_slam.sweep_spans, dtype=np.float64)
+        stamps = np.asarray(self._get_frames_timestamps(), dtype=np.float64)[: len(self.poses)]
+        n = len(self.poses)
+        if len(fractions) != n or len(spans) != n or len(stamps) != n or n < 2:
+            print("KissSLAM| pose times not written: one fraction, span and stamp per pose needed")
+            return
+        unit = 10.0 ** np.round(np.log10(np.median(np.diff(stamps)) / np.nanmedian(spans)))
+        spans = np.where(np.isfinite(spans), spans * unit, np.nanmedian(spans) * unit)
+        pose_time = stamps + fractions * spans
+        with open(os.path.join(self.results_dir, "pose_times.csv"), "w", newline="") as f:
+            w = csv.writer(f)
+            w.writerow(["scan", "stamp", "fraction", "span_s", "pose_time"])
+            for k, (t, a, d, p) in enumerate(zip(stamps, fractions, spans, pose_time)):
+                w.writerow([k, f"{t:.6f}", f"{a:.4f}", f"{d:.6f}", f"{p:.6f}"])
+        poses = self._calibrate_poses(self.poses)
+        rows = [np.r_[t, T[:3, 3], Rotation.from_matrix(T[:3, :3]).as_quat()] for t, T in zip(pose_time, poses)]
+        np.savetxt(f"{self.results_dir}/{self.dataset_sequence}_poses_posetime_tum.txt", np.array(rows), fmt="%.6f")
 
     def _write_two_start_log(self):
         """two_start.csv: every scan registered from several starting points, their fits and the one kept (#058)."""

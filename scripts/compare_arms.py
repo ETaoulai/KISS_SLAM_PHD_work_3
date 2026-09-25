@@ -3,6 +3,8 @@
 
     python scripts/compare_arms.py <results csv> "<arm A>" "<arm B>" [<arm A2> <arm B2> ...]
 
+Works on both results_table.py outputs: the default one (RPE 1 s, ATE, KITTI) and --official (evo: RPE 1 m and 1 s, APE).
+
 The unit is the sequence: each arm's mean over its runs on that sequence, paired by sequence.  Per metric:
 how many sequences each arm wins (lower is better; path: closer to the GT), the median of (A - B) / B, and a
 two-sided Wilcoxon signed-rank test on the paired values (exact for n <= 25; with 8 sequences the smallest
@@ -16,18 +18,23 @@ from scipy.stats import wilcoxon
 
 METRICS = [("rpe_t", "RPE 1 s translation"), ("rpe_r", "RPE 1 s rotation"), ("ate", "ATE"),
            ("excess", "path length vs GT (|%|)"), ("z_rmse", "z RMSE"), ("kitti", "KITTI")]
+# A results_table.py --official csv (rpe1s_* present): RPE over 1 m and over 1 s, APE of evo, no KITTI.
+METRICS_OFFICIAL = [("rpe_t", "RPE 1 m translation"), ("rpe_r", "RPE 1 m rotation"), ("rpe1s_t", "RPE 1 s translation"),
+                    ("rpe1s_r", "RPE 1 s rotation"), ("ate", "APE (evo)"), ("excess", "path length vs GT (|%|)"),
+                    ("z_rmse", "z RMSE")]
 
 
 def main():
     rows = list(csv.DictReader(open(sys.argv[1])))
     pairs = sys.argv[2:]
+    metric_list = METRICS_OFFICIAL if rows and "rpe1s_t" in rows[0] else METRICS
     for a, b in zip(pairs[::2], pairs[1::2]):
         seqs = [s for s in dict.fromkeys(r["sequence"] for r in rows)
                 if {a, b} <= {r["arm"] for r in rows if r["sequence"] == s}]
         val = lambda arm, s, m: float(next(r[m] for r in rows if r["sequence"] == s and r["arm"] == arm))
         print(f"\n{a}  vs  {b}   ({len(seqs)} sequences: {', '.join(seqs)})")
         print(f"  {'metric':26s} {'A wins':>7s} {'B wins':>7s} {'median (A-B)/B':>15s} {'Wilcoxon p':>11s}")
-        for m, name in METRICS:
+        for m, name in metric_list:
             x = np.array([[val(a, s, m), val(b, s, m)] for s in seqs])
             x = x[np.isfinite(x).all(1)]
             if m == "excess":
