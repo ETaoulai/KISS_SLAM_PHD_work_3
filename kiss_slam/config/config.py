@@ -179,6 +179,9 @@ class ImageDeskewConfig(BaseModel):
     # distance of the source to its nearest map point).  None = off (every result before #059).  Default 5 since #059
     # (decision M.T. 25/9): fixes blenheim-palace-02 (5.3 -> 0.3 m) with no significant change on 15 other sequences (#058).
     two_start_deg: Optional[float] = 5.0
+    # Margin of the two-start choice (open_tasks B.6, #060): another start replaces the image start only when its fit is
+    # better by more than this fraction, fit_other < (1 - margin) * fit_image.  0 = the plain best fit (#057-#060).
+    two_start_margin: float = 0.0
     # Motion from the RANGE panorama too (#058; log range + CLAHE, SURF at range_hessian): "fallback" = used when the
     # intensity motion fails or is rejected; "candidate" = an extra starting point for the two-start registration.
     range_motion: Optional[Literal["fallback", "candidate"]] = None

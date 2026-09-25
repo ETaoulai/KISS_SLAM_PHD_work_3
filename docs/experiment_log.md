@@ -336,7 +336,7 @@ Reader: `kiss_slam/tools/ncd_pcd.py` (intensity × 255/1024, ring, **απόλυ�
 **σχετικό** (από την αρχή κάθε σάρωσης) και το intensity σε κλίμακα 0–~1100 — τα δύο προβλήματα του #041. Χρειάζονται
 την ίδια προσαρμογή πριν τρέξουν με `--image-deskew`.
 
-### Αξιολόγηση με το επίσημο πρωτόκολλο (evo, #061 — προεπιλογή από 25/9)
+### Αξιολόγηση με το επίσημο πρωτόκολλο (evo, #061 — η μόνη αξιολόγηση από 25/9, ΑΠΟΦΑΣΗ Μ.Τ.)
 
 Όπως το benchmark του Oxford Spires (`scripts/localisation_benchmark/*.py` του `ori-drs/oxford_spires_dataset`):
 `evo_ape tum gt_lidar.txt <εκτίμηση>_tum.txt --align --t_max_diff 0.01` — APE μετατόπισης (RMSE) μετά από στερεή ευθυγράμμιση SE(3),
@@ -344,7 +344,7 @@ Reader: `kiss_slam/tools/ncd_pcd.py` (intensity × 255/1024, ring, **απόλυ�
 
 ```bash
 python scripts/evaluate_official.py <GT> <run dir> [<run dir> …] --frame=spires|ncd2021|ncd2020 [--out=<dir>] [-v]
-python scripts/results_table.py --official            # όλες οι ακολουθίες → /home/photogrammetry/kiss_runs/results_official.md/.csv
+python scripts/results_table.py                        # όλες οι ακολουθίες, οι 7 βραχίονες → /home/photogrammetry/kiss_runs/results_official.md/.csv
 python scripts/compare_arms.py /home/photogrammetry/kiss_runs/results_official.csv "<βραχίονας A>" "<βραχίονας B>"
 ```
 **Χρόνος κάθε θέσης.** Η χρονοσφραγίδα της σάρωσης είναι το **πρώτο** σημείο της περιστροφής (Hesai, Ouster, pcd 2020)· μια σάρωση με
@@ -532,6 +532,45 @@ SIFT και RoMa. Υπάρχει αυτοβαθμονομούμενη διόρθ
 ---
 
 ## 📒 Εγγραφές πειραμάτων (νεότερα πρώτα)
+
+---
+
+### 2026-09-25 — #063 Η σκάλα λύνεται: δύο αρχές + indoor_detail (open_tasks Β.3, μία φορά)
+
+**Σχετικά:** [#045](#2026-09-23--045-δύο-ακόμη-βάσεις-του-kiss-χωρίς-deskew-indoor_detail-και-η-χρονική-μετατόπιση-της-αξιολόγησης) (μόνο το
+indoor_detail έλυνε τη σκάλα), [#059](#2026-09-25--059-δύο-αρχικές-θέσεις-ως-προεπιλογή-4-σπόροι-σε-16-ακολουθίες), [#061](#2026-09-25--061-αξιολόγηση-με-το-επίσημο-πρωτόκολλο-evo--κάθε-θέση-στη-δική-της-στιγμή--κλείνει-το-ανοιχτό-πρόβλημα-του-045046)
+(αξιολόγηση) · κλάδος `after_two_start` · runs `/home/photogrammetry/kiss_runs/newer_college_2021/stairs/surftwodetail_s0–3`,
+`kissdetailnodeskew_s0` · scripts `/home/photogrammetry/kiss_runs/b3_062_launch.sh` · νέο config `configs/indoor_detail_nodeskew.yaml`
+
+#### Στόχος
+Ζήτημα Μ.Τ. (μία φορά, εκτός των βραχιόνων σύγκρισης): η σκάλα του NCD 2021 έμενε άλυτη με κάθε βραχίονα στη ρύθμιση του paper (ATE ~2.1 m και με
+δύο αρχές, #059)· μόνο ο KISS με `indoor_detail` τη «έλυνε» (0.46 m, #045). Λύνεται με δύο αρχές + indoor_detail;
+
+#### Μέθοδος
+`run_ncd.py surf … --config=configs/indoor_detail.yaml --two-start=5`, σπόροι 0–3 (voxel 0.25 m, εμβέλεια 50 m, χάρτες 15 m). Δίκαιη βάση στο ίδιο
+config: KISS **χωρίς deskew** (`configs/indoor_detail_nodeskew.yaml` = indoor_detail με `deskew: false`), 1 run (ντετερμινιστικός). Αξιολόγηση με το
+επίσημο πρωτόκολλο (#061).
+
+#### Αποτέλεσμα (stairs, 57 m)
+
+| Βραχίονας | runs | APE [m] | RPE 1 s [cm] | RPE 1 s [°] | μήκος έναντι GT | z RMSE [m] |
+|---|---|---|---|---|---|---|
+| KISS (paper) | 2 | 3.586 | 100.9 | 27.73 | +318 % | 2.333 |
+| KISS χωρίς deskew (paper) | 1 | 2.705 | 67.9 | 13.71 | +183 % | 2.327 |
+| SURF δύο αρχές (paper) | 4 | 2.074 ± 0.225 | 21.3 ± 0.6 | 5.01 ± 0.16 | +64 % | 1.770 |
+| KISS indoor_detail | 1 | 0.458 | 12.05 | 3.92 | +35.1 % | 0.341 |
+| KISS indoor_detail χωρίς deskew | 1 | 0.536 | 9.90 | 2.88 | +20.3 % | 0.460 |
+| **SURF δύο αρχές indoor_detail** | 4 | 0.478 ± 0.048 | **6.35 ± 0.35** | **2.48 ± 0.03** | **+10.5 %** | 0.386 ± 0.036 |
+
+Χρόνος: ~740 s ανά run (δύο αρχές σε 61–66 σαρώσεις, +3.6–4.1 %)· KISS χωρίς deskew 117 s.
+
+#### Συμπέρασμα ⏳ (1 ακολουθία· βάσεις 1 run)
+1. **Η σκάλα λύνεται** με δύο αρχές + indoor_detail: APE 2.07 → 0.48 m. Η αποτυχία ήταν της ρύθμισης (voxel 1 m, εμβέλεια 100 m), όχι της μεθόδου.
+2. **Έναντι της δίκαιης βάσης στο ίδιο config (χωρίς deskew) η εικόνα κερδίζει τοπικά:** RPE μετατόπισης −36 %, **στροφής −14 %** (εδώ και η στροφή,
+   σε αντίθεση με την ισοπαλία των 16 ακολουθιών), μήκος +20 % → +10.5 %. Στο APE οι τρεις βραχίονες του indoor_detail (0.46–0.54 m) δεν
+   διακρίνονται με ένα run βάσης (σ ~0.05 m).
+3. Ανοιχτό: αν το indoor_detail βοηθά την εικόνα και σε άλλες εσωτερικές ακολουθίες — εκτός των βραχιόνων σύγκρισης (απόφαση Μ.Τ. 25/9)· μόνο αν
+   το ζητήσει ο Μ.Τ.
 
 ---
 

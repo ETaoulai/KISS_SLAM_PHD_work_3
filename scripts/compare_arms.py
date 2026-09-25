@@ -3,7 +3,8 @@
 
     python scripts/compare_arms.py <results csv> "<arm A>" "<arm B>" [<arm A2> <arm B2> ...]
 
-Works on both results_table.py outputs: the default one (RPE 1 s, ATE, KITTI) and --official (evo: RPE 1 m and 1 s, APE).
+Works on both results_table.py outputs: the default one (official protocol, evo: RPE 1 m and 1 s, APE) and --legacy
+(RPE 1 s, ATE, KITTI of #041-#060).
 
 The unit is the sequence: each arm's mean over its runs on that sequence, paired by sequence.  Per metric:
 how many sequences each arm wins (lower is better; path: closer to the GT), the median of (A - B) / B, and a
@@ -18,7 +19,7 @@ from scipy.stats import wilcoxon
 
 METRICS = [("rpe_t", "RPE 1 s translation"), ("rpe_r", "RPE 1 s rotation"), ("ate", "ATE"),
            ("excess", "path length vs GT (|%|)"), ("z_rmse", "z RMSE"), ("kitti", "KITTI")]
-# A results_table.py --official csv (rpe1s_* present): RPE over 1 m and over 1 s, APE of evo, no KITTI.
+# A results_table.py csv of the official protocol (rpe1s_* present): RPE over 1 m and over 1 s, APE of evo, no KITTI.
 METRICS_OFFICIAL = [("rpe_t", "RPE 1 m translation"), ("rpe_r", "RPE 1 m rotation"), ("rpe1s_t", "RPE 1 s translation"),
                     ("rpe1s_r", "RPE 1 s rotation"), ("ate", "APE (evo)"), ("excess", "path length vs GT (|%|)"),
                     ("z_rmse", "z RMSE")]

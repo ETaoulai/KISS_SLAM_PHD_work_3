@@ -57,8 +57,11 @@ log. Ένα σημείο ανά είδος πληροφορίας — μην α�
   επίτηδες, ώστε να δουλεύει το `KISS_SLAM_OUT_DIR`.
 - `scripts/run_ab.sh` — τρέχει και τους δύο βραχίονες A/B στο `runs/`.
 - `scripts/evaluate_gt.py` — ATE / RPE / z-προφίλ έναντι του Ground Truth.
-- `scripts/evaluate_official.py` — **η αξιολόγηση από 25/9 (#061):** πρωτόκολλο evo του Oxford Spires (APE `--align --t_max_diff 0.01`, RPE 1 m / 1 s),
-  κάθε θέση στη στιγμή που αντιπροσωπεύει, χωρίς αναζήτηση μετατόπισης χρόνου. Για όλο τον πίνακα: `results_table.py --official`.
+- `scripts/evaluate_official.py` — **η ΜΟΝΗ αξιολόγηση από 25/9 (#061, ΑΠΟΦΑΣΗ Μ.Τ.):** πρωτόκολλο evo του Oxford Spires (APE `--align --t_max_diff 0.01`,
+  RPE 1 m / 1 s), κάθε θέση στη στιγμή που αντιπροσωπεύει, **χωρίς μετατόπιση χρόνου**. Για όλο τον πίνακα: `results_table.py` (προεπιλογή).
+  Τα `evaluate_ncd.py` / `evaluate_gt.py` / `results_table.py --legacy` μόνο για αναπαραγωγή παλιών πινάκων.
+- **Βραχίονες σύγκρισης (ΑΠΟΦΑΣΗ Μ.Τ. 25/9):** KISS-SLAM · KISS-SLAM χωρίς deskew · i3 + SIFT · i3 + SURF · i3 + SURF δύο αρχές · δύο αρχές με
+  περιθώριο αλλαγής 2 % / 4 % (#062). Όχι indoor_detail, όχι ablations (εξομάλυνση στροφής, μόνο μετατόπιση) — `results_table.py --all-arms` για όλα.
 - `scripts/eval_motion_npz.py` — σφάλμα ενός αποθηκευμένου npz κίνησης έναντι GT, χωρίς επανεκτίμηση.
 - `scripts/measure_variance.sh` — διασπορά της μεθόδου (4 σπόροι × 2 τρόποι κατασκευής)· **τρέξ' το πριν από κάθε σύγκριση**.
 - `scripts/analyze_rig_mask.py` — τι είναι καρφωμένο στον σαρωτή (σκιές διάταξης, σιλουέτα χειριστή).

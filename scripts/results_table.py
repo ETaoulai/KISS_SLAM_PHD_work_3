@@ -1,17 +1,22 @@
 #!/usr/bin/env python3
 """All results in one table: every sequence x arm, mean ± σ over its runs, against the ground truth.
 
-    python scripts/results_table.py [<data root>] [--out=<prefix>] [--offset=best | --official] [--extra=/home/photogrammetry/kiss_runs]
+    python scripts/results_table.py [<data root>] [--out=<prefix>] [--all-arms] [--extra=/home/photogrammetry/kiss_runs]
+                                    [--legacy [--offset=best]]
 
-Reads the run folders under <data root>/runs (default /media/photogrammetry/A26C3DDF6C3DAF431/data) with the
-evaluation of scripts/evaluate_ncd.py, and writes <prefix>.md and <prefix>.csv (default /home/photogrammetry/kiss_runs/results_all,
-on ext4: the NTFS data disk is read-only, #052).
-Sequences: Newer College 2020 01_short (#041), the five of 2021 (#043), Oxford Spires christ-church-02 / -03 full
-recordings.  --offset=best: every run is scored at its own best time shift (evaluate_ncd.best_offset, #045),
-default <prefix> then results_all_best_offset.
---official: the protocol of the Oxford Spires benchmark with evo, every pose at the instant it stands for, no time
-search (scripts/evaluate_official.py); default <prefix> results_official, the estimates / GT as TUM under
-<extra>/official_eval/<sequence>/ for the evo command line.  Arms are the run-folder names up to the first "_" (kiss, sift, surf); folders that do not exist are skipped.
+Reads the run folders under <data root>/runs (default /media/photogrammetry/A26C3DDF6C3DAF431/data) and under <extra>,
+and writes <prefix>.md and <prefix>.csv (on ext4: the NTFS data disk is read-only, #052).
+Sequences: Newer College 2020 01_short (#041), 2021 (#043, #052), Oxford Spires (#044, #052): 16 in all.
+
+Evaluation (DECISION M.T. 25/9): the official protocol ONLY — the Oxford Spires benchmark with evo, every pose at the
+instant it stands for, no time offset (scripts/evaluate_official.py, #061); default <prefix> results_official, the
+estimates / GT as TUM under <extra>/official_eval/<sequence>/ for the evo command line.
+--legacy: the evaluation of #041-#060 (evaluate_ncd.py, GT interpolated at the scan stamps; --offset=best: each run at
+its own best time shift, #045) — only to reproduce old tables, never for new comparisons.
+
+Arms (DECISION M.T. 25/9): KISS-SLAM, KISS-SLAM no deskew, i3 + SIFT, i3 + SURF, i3 + SURF two starting points, and
+two starting points with a switch margin (#062).  --all-arms: every arm with runs (ablations, indoor_detail, ...).
+Arms are the run-folder names up to the first "_"; folders that do not exist are skipped.
 """
 import csv
 import re
@@ -26,8 +31,9 @@ from evaluate_ncd import evaluate, load_gt  # noqa: E402
 from evaluate_official import evaluate_official  # noqa: E402
 
 ROOT = Path(next((a for a in sys.argv[1:] if not a.startswith("--")), "/media/photogrammetry/A26C3DDF6C3DAF431/data"))
-OFFSET = "best" if "--offset=best" in sys.argv else 0.0
-OFFICIAL = "--official" in sys.argv
+LEGACY = "--legacy" in sys.argv
+OFFSET = "best" if LEGACY and "--offset=best" in sys.argv else 0.0
+OFFICIAL = not LEGACY
 NC, RUNS = ROOT / "newer_college", ROOT / "runs"
 EXTRA = Path(next((a.split("=", 1)[1] for a in sys.argv[1:] if a.startswith("--extra=")), "/home/photogrammetry/kiss_runs"))
 # Written to EXTRA (ext4), never to the NTFS data disk: ntfs3 kernel BUG on writes (#046, #052; decision M.T. 24/9).
@@ -67,7 +73,14 @@ ARMS = {"kissncd": "KISS-SLAM, kiss_icp NCD loader", "kissnodeskew": "KISS-SLAM,
         "surfrot": "i3 + SURF, rotation only", "surfsmooth3": "i3 + SURF, rotation smoothed (3)",
         "surfh25": "i3 + SURF, threshold 25", "surfh10": "i3 + SURF, threshold 10", "surfgate": "i3 + SURF, gated", "surfgate25": "i3 + SURF, gated 25/20",
         "surfgate25id": "i3 + SURF, gated 25/20, identity fallback", "surftwo": "i3 + SURF, two starting points",
-        "surfrangefb": "i3 + SURF, range when intensity fails", "surftworange": "i3 + SURF, three starts (+ range)"}
+        "surfrangefb": "i3 + SURF, range when intensity fails", "surftworange": "i3 + SURF, three starts (+ range)",
+        "surftwom2": "i3 + SURF, two starting points, margin 2 %", "surftwom4": "i3 + SURF, two starting points, margin 4 %",
+        "surftwodetail": "i3 + SURF, two starting points, indoor_detail (one-off, stairs)",
+        "kissdetailnodeskew": "KISS-SLAM, indoor_detail, no deskew (one-off, stairs)"}
+# The arms compared from 25/9 on (decision M.T.): no indoor_detail, no ablations (rotation smoothed, translation only, ...).
+MAIN_ARMS = ["kiss", "kissnodeskew", "sift", "surf", "surftwo", "surftwom2", "surftwom4"]
+if "--all-arms" not in sys.argv:
+    ARMS = {k: ARMS[k] for k in MAIN_ARMS}
 METRICS = [("ate", "ATE [m]", "{:.3f}"), ("rpe_t", "RPE 1 s [cm]", "{:.2f}"), ("rpe_r", "RPE 1 s [°]", "{:.3f}"),
            ("path", "path [m]", "{:.1f}"), ("excess", "path vs GT [%]", "{:+.1f}"), ("z_rmse", "z RMSE [m]", "{:.3f}"),
            ("kitti", "KITTI [%]", "{:.2f}"), ("fail", "image fails", "{:.0f}"), ("offset", "time shift [s]", "{:+.3f}")]

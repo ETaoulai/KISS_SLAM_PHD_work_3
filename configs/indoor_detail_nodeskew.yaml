@@ -1,0 +1,72 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# KISS-SLAM — indoor "detail" config WITHOUT deskew (baseline of open_tasks B.3, #063; otherwise = indoor_detail.yaml)
+#
+# Χρήση:
+#   kiss_slam_pipeline data/church_02_cut.bag -t /hesai/pandar \
+#       --config configs/indoor_detail.yaml --no-use-intensity      # baseline
+#       --config configs/indoor_detail.yaml --use-intensity         # intensity
+#
+# ⚠️ Το `out_dir` ΔΕΝ ορίζεται εδώ επίτηδες: αν μπει σε YAML, υπερισχύει της
+#    μεταβλητής KISS_SLAM_OUT_DIR. Έτσι όπως είναι, μπορείς να κατευθύνεις την
+#    έξοδο ανά run με:  KISS_SLAM_OUT_DIR=/path/to/run kiss_slam_pipeline ...
+#    Αλλιώς γράφει στο ./slam_output/<timestamp>/.
+#
+# Τεκμηρίωση επιλογών: docs/experiment_log.md, εγγραφή #004 (voxel sweep).
+# ─────────────────────────────────────────────────────────────────────────────
+
+odometry:
+    preprocessing:
+        # Hesai QT64: ονομαστική εμβέλεια 60 m. Το default 100.0 είναι για
+        # αυτοκίνητο σε αστικό δρόμο και, επειδή το voxel_size παράγεται ως
+        # max_range/100, οδηγεί σε voxel 1.0 m -> ~900 σημεία από τα 54.600.
+        max_range: 50.0
+        min_range: 0.0
+        # Το bag έχει per-point πεδίο `timestamp` -> το deskew είναι ουσιαστικό
+        # για handheld μονάδα που ανεβοκατεβαίνει σκάλα.
+        deskew: false
+
+    mapping:
+        # Ρητά ορισμένο (δεν αφήνουμε το max_range/100 να το βγάλει).
+        # Το `source` του ICP voxelάρεται στο 1.5x αυτής της τιμής -> 0.375 m.
+        voxel_size: 0.25
+        max_points_per_voxel: 20
+
+    registration:
+        max_num_iterations: 500
+        convergence_criterion: 0.0001
+        # 8 πυρήνες (όχι όλους: το laptop ζεσταίνεται — Λ.Γ. 18/9). Δεν αλλάζει το αποτέλεσμα.
+        max_num_threads: 8
+
+local_mapper:
+    voxel_size: 0.25
+    # Το default 100.0 m σημαίνει ότι όλη η σεκάνς γίνεται 1-2 nodes και δεν
+    # δοκιμάζεται ποτέ ο loop closer. 15 m ταιριάζει στην κλίμακα εσωτερικού.
+    splitting_distance: 15.0
+
+intensity:
+    # Ο A/B διακόπτης. Άφησέ τον false εδώ και όρισε τον βραχίονα από CLI
+    # (--use-intensity / --no-use-intensity), ώστε το ίδιο αρχείο config να
+    # εξυπηρετεί και τους δύο βραχίονες.
+    enabled: false
+    keep_ratio: 0.70
+    min_intensity: 0.05
+    lambda_geometric: 0.90
+
+diagnostics:
+    # Το per-frame RMS residual χτίζει KD-tree πάνω σε όλο τον χάρτη σε κάθε frame
+    # και ήταν το μεγαλύτερο κόστος (2.37x πιο αργό). ΔΕΝ επηρεάζει την τροχιά.
+    # Για αξιολόγηση με GT δεν χρειάζεται. Βάλε true αν θες το icp_metrics.png·
+    # τα υπόλοιπα διαγνωστικά (κίνηση, model deviation, σ, γεωμετρία) μένουν πάντα.
+    icp_metrics: false
+    rebuild_every: 1
+
+loop_closer:
+    detector:
+        density_map_resolution: 0.5
+        density_threshold: 0.05
+        hamming_distance_threshold: 50
+        inliers_threshold: 5
+    overlap_threshold: 0.4
+
+pose_graph_optimizer:
+    max_iterations: 10

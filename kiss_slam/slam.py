@@ -834,6 +834,8 @@ class KissSLAM:
                                                              3 * sigma).mean())
                     fits = {name: fit(r[1], r[4]) for name, r in results.items()}
                     best = min(fits, key=fits.get)
+                    if best != "image" and fits[best] >= (1.0 - self.image_cfg.two_start_margin) * fits["image"]:
+                        best = "image"                      # not better by the margin: keep the image start
                     deskewed, source, frame_downsample, initial_guess, new_pose = results[best]
                     kept_delta = delta if best == "image" else cands[best][0]
                     self.n_two_start += 1

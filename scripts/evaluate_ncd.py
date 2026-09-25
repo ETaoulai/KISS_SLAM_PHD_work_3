@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Runs of scripts/run_ncd.py against a ground truth, grouped by arm.
+"""Runs of scripts/run_ncd.py against a ground truth, grouped by arm.  LEGACY (#041-#060): since 25/9 every comparison uses
+scripts/evaluate_official.py (official evo protocol, no time offset, decision M.T.); this one only reproduces old tables.
 
     python scripts/evaluate_ncd.py <ground truth> <run dir> [<run dir> ...] [--frame=ncd2020|ncd2021|spires|none]
                                    [--offset=<s>|best]
