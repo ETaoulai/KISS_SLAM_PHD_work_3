@@ -4,7 +4,7 @@
     python scripts/run_ncd.py <arm> <sequence> <out dir> [n_scans] [--config=<yaml>] [--seed=N] [--parallel]
                               [--topic=/os_cloud_node/points] [--intensity-scale=0.249] [--diag]
                               [--parts=full|translation|rotation] [--rot-smooth=k] [--save-frames=<voxel m>] [--save-fraction=f]
-                              [--gate [--gate-min=0] [--gate-rot=10] [--gate-drot=8]] [--fallback=identity|cv] [--two-start=<deg>] [--range=fallback|candidate]
+                              [--gate [--gate-min=0] [--gate-rot=10] [--gate-drot=8]] [--fallback=identity|cv] [--two-start=<deg>|none] [--range=fallback|candidate]
 
 sequence: a 2020 sequence dir with raw_format/ouster_scan/*.pcd (kiss_slam/tools/ncd_pcd.py), or a
           .bag file, or a folder whose *.bag are ONE split sequence (read in time order; 2021 bags).
@@ -69,7 +69,8 @@ def main():
         if "fallback" in opts:                                   # identity | constant_velocity (#057)
             config.image_deskew.fallback = {"cv": "constant_velocity"}.get(opts["fallback"], opts["fallback"])
         if "two-start" in opts:                                  # register twice when image and CV disagree (#057)
-            config.image_deskew.two_start_deg = float(opts["two-start"])
+            v = opts["two-start"]                            # "none" / "off": single start (every result before #059)
+            config.image_deskew.two_start_deg = None if v.lower() in ("none", "off") else float(v)
         if "range" in opts:                                      # range-image motion: fallback | candidate (#058)
             config.image_deskew.range_motion = opts["range"]
         if "save-frames" in opts:

@@ -292,6 +292,11 @@ python scripts/precompute_i3_motion.py … --trans-min=8 --trans-mode=auto
 python scripts/eval_motion_npz.py runs/<x>.npz gt/<seq>_gt-tum.txt runs/<run της ακολουθίας>
 ```
 
+**Δύο αρχικές θέσεις για τον ICP — προεπιλογή από το #059** (`image_deskew.two_start_deg: 5`, απόφαση Μ.Τ. 25/9): όταν η κίνηση της εικόνας και η
+σταθερή ταχύτητα διαφέρουν > 5° σε στροφή, η σάρωση καταχωρίζεται και από τις δύο αρχές και κρατείται το καλύτερο ταίριασμα στον τοπικό χάρτη (#057–#058).
+`two_start_deg: null` (ή `run_ncd.py --two-start=none`) = μία αρχή, όπως κάθε αποτέλεσμα πριν από το #059. Προαιρετικά `range_motion: candidate | fallback`
+(εικόνα απόστασης, #058), `gate_*` / `fallback` (έλεγχος αληθοφάνειας, #054–#055), `save_rejected_dir`.
+
 Ανιχνευτής, σπόρος και παράλληλη εκτέλεση (#041, #042):
 
 ```yaml

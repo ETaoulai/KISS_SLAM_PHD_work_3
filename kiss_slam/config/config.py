@@ -176,8 +176,9 @@ class ImageDeskewConfig(BaseModel):
     # Two starting points (#057): when the image motion and KISS's constant-velocity guess differ by more than this
     # (deg of rotation), register the scan twice — (A) deskewed with the image motion and started from it, (B) not
     # deskewed and started from constant velocity — and keep the result that fits the local map better (truncated mean
-    # distance of the source to its nearest map point).  None = off.
-    two_start_deg: Optional[float] = None
+    # distance of the source to its nearest map point).  None = off (every result before #059).  Default 5 since #059
+    # (decision M.T. 25/9): fixes blenheim-palace-02 (5.3 -> 0.3 m) with no significant change on 15 other sequences (#058).
+    two_start_deg: Optional[float] = 5.0
     # Motion from the RANGE panorama too (#058; log range + CLAHE, SURF at range_hessian): "fallback" = used when the
     # intensity motion fails or is rejected; "candidate" = an extra starting point for the two-start registration.
     range_motion: Optional[Literal["fallback", "candidate"]] = None

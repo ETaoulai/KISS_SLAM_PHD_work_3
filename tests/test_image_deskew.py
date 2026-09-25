@@ -39,6 +39,7 @@ def dataset(raw=False):
 
 def config(**image_deskew):
     cfg = load_config(CFG)
+    cfg.image_deskew.two_start_deg = None     # the references predate the two-start default (#059)
     for k, v in image_deskew.items():
         setattr(cfg.image_deskew, k, v)
     return cfg
