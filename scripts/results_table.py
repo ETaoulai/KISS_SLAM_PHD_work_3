@@ -28,6 +28,8 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).parent))
 from evaluate_gt import find_tum  # noqa: E402
 from evaluate_ncd import evaluate, load_gt  # noqa: E402
+from evaluate_hilti import evaluate_hilti  # noqa: E402
+from evaluate_ntu import evaluate_ntu  # noqa: E402
 from evaluate_official import evaluate_official  # noqa: E402
 
 ROOT = Path(next((a for a in sys.argv[1:] if not a.startswith("--")), "/media/photogrammetry/A26C3DDF6C3DAF431/data"))
@@ -68,6 +70,20 @@ for seq, folder, gt in [("keble-college-03", "2024-03-12-keble-college-03", "gt-
     SEQUENCES.append(("Oxford Spires", seq, "Hesai QT64", ROOT / f"oxford_spires/{folder}/ground_truth/{gt}", "spires",
                       RUNS / "oxford_spires_full" / run))
 
+# New datasets (25/9, docs/datasets.md): organised as links in KD (ext4); Hilti 2021 and NTU VIRAL scored with THEIR official
+# protocols (scripts/evaluate_hilti.py, evaluate_ntu.py): one number per run, the challenge's APE / the dataset's ATE.
+KD = Path("/home/photogrammetry/kiss_data")
+for seq in ("02_long_experiment", "dynamic_spinning"):
+    SEQUENCES.append(("Newer College 2020", seq, "Ouster OS1-64", KD / f"newer_college/2020/{seq}/ground_truth/registered_poses.csv",
+                      "ncd2020", RUNS / f"newer_college_2020/{seq}"))
+for seq, ref in [("Basement_1", "pole"), ("IC_Office_1", "pole"), ("Office_Mitte_1", "pole"), ("Construction_Site_1", "prism"),
+                 ("LAB_Survey_2", "imu"), ("UZH_Tracking_Area_Run_2", "imu")]:
+    SEQUENCES.append(("Hilti 2021", seq, "Ouster OS0-64", KD / f"hilti_2021/{seq}/ground_truth/{seq}_{ref}.txt", "hilti",
+                      RUNS / f"hilti_2021/{seq}"))
+for seq in ("eee_01", "eee_02", "eee_03"):
+    SEQUENCES.append(("NTU VIRAL", seq, "Ouster OS1-16 (horizontal)", KD / f"ntu_viral/ntuviral_gt/{seq}/ground_truth.csv", "ntu",
+                      RUNS / f"ntu_viral/{seq}"))
+
 ARMS = {"kissncd": "KISS-SLAM, kiss_icp NCD loader", "kissnodeskew": "KISS-SLAM, no deskew", "kissdetail": "KISS-SLAM, indoor_detail", "kiss": "KISS-SLAM",
         "sift": "i3 + SIFT", "surf": "i3 + SURF", "surftrans": "i3 + SURF, translation only",
         "surfrot": "i3 + SURF, rotation only", "surfsmooth3": "i3 + SURF, rotation smoothed (3)",
@@ -92,7 +108,7 @@ if OFFICIAL:
 
 
 CACHE_VERSION = 1      # bump when evaluate_ncd.evaluate changes what it computes
-OFFICIAL_VERSION = 3   # bump when evaluate_official.evaluate_official changes what it computes
+OFFICIAL_VERSION = 4   # bump when evaluate_official.evaluate_official changes what it computes
 
 
 def cached_evaluate(gt, frame, gt_t, gt_T, run):
@@ -114,7 +130,18 @@ def cached_evaluate(gt, frame, gt_t, gt_T, run):
     path = EXTRA / ".eval_cache" / f"{key}.json"
     if path.exists():
         return json.loads(path.read_text())
-    if OFFICIAL:
+    if frame in ("hilti", "ntu"):          # the dataset's own protocol: one score per run
+        if frame == "hilti":
+            h = evaluate_hilti(gt, run, out_dir=EXTRA / "official_eval" / run.parent.name)
+            v = dict(ate=h["rmse"], matched=h["n_matched"] / h["n_ref"] if h["kind"] != "imu.txt" else float("nan"))
+        else:
+            h = evaluate_ntu(run.parent.name, run, out_dir=EXTRA / "official_eval" / run.parent.name)
+            v = dict(ate=h["ate"], matched=h["completeness"] / 100)
+        m = re.search(r"image motion: \d+/\d+ scans \((\d+) fell back", log.read_text(errors="replace")) if log.exists() else None
+        v["fail"] = float(m[1]) if m else float("nan")
+        v = {k: float(v.get(k, float("nan"))) for k in
+             ("ate", "rpe_t", "rpe_r", "rpe1s_t", "rpe1s_r", "path", "gt_path", "z_rmse", "fail", "matched", "pose_minus_stamp", "gt_interp")}
+    elif OFFICIAL:
         v = evaluate_official(gt_t, gt_T, run, frame, EXTRA / "official_eval" / run.parent.name)
         m = re.search(r"image motion: \d+/\d+ scans \((\d+) fell back", log.read_text(errors="replace")) if log.exists() else None
         v["fail"] = float(m[1]) if m else float("nan")
@@ -141,7 +168,7 @@ def main():
         if not runs:
             print(f"skip {seq}: no runs in {folder}")
             continue
-        gt_t, gt_T, _ = load_gt(gt, frame)
+        gt_t, gt_T, _ = load_gt(gt, frame) if frame not in ("hilti", "ntu") else (None, None, frame)
         res = {r.name: cached_evaluate(gt, frame, gt_t, gt_T, r) for r in runs}
         for v in res.values():
             v["excess"] = 100 * (v["path"] / v["gt_path"] - 1)
@@ -178,7 +205,9 @@ def main():
               "(scripts/evaluate_official.py): scan stamp = first point of the sweep; deskewed scan = last point (+0.1 s); "
               "raw scan (no deskew) = mean point time (+0.05 s).  No search over time shifts (#045/#046 closed).  "
               "Poses without a GT sample within 10 ms are dropped, as evo does (Oxford Spires has GT at ~77 % of the scan stamps "
-              "plus a 20 Hz grid).  GT interp. = 1: the GT is interpolated at the pose times (fewer than half associate: "
+              "plus a 20 Hz grid).  Hilti 2021 and NTU VIRAL: the APE column is the dataset's own official score (Hilti SLAM Challenge "
+              "2021: APE of the IMU / pole tip / prism, scripts/evaluate_hilti.py; NTU VIRAL: ATE of the prism, scripts/evaluate_ntu.py), "
+              "assoc. = control points matched (Hilti, sparse GT) / completeness (NTU); the other columns stay empty.  GT interp. = 1: the GT is interpolated at the pose times (fewer than half associate: "
               "no-deskew poses fall between the GT samples).  " if OFFICIAL else
               "Every run is scored at the time shift (added to its scan stamps) that minimises its rotation RPE over 1 s, "
               "searched in -0.15..+0.25 s (last column).  Arms differ in which instant of the sweep a pose stands for, and "
@@ -202,7 +231,8 @@ def main():
             for c, _, f in METRICS:
                 s = cell(r, c, f)
                 cells.append(f"**{s}**" if best.get(c) is r and len(grp) > 1 else s)
-            first = f"{r['dataset']} | {r['sequence']} ({r['gt_path']:.0f} m)" if i == 0 else " | "
+            gp = f" ({r['gt_path']:.0f} m)" if np.isfinite(r["gt_path"]) else ""
+            first = f"{r['dataset']} | {r['sequence']}{gp}" if i == 0 else " | "
             lines.append(f"| {first} | {r['arm']} | {r['runs']} | " + " | ".join(cells) + " |")
     OUT.with_suffix(".md").write_text("\n".join(lines) + "\n")
     print(f"→ {OUT.with_suffix('.md')}, {OUT.with_suffix('.csv')}")

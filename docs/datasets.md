@@ -10,7 +10,7 @@
 | Dataset | Ακολουθία | Φάκελος (`kiss_data/…`) | LiDAR / topic | Διάρκεια | GT | Κατάσταση |
 |---|---|---|---|---|---|---|
 | Newer College 2020 | 02_long_experiment | `newer_college/2020/02_long_experiment/rosbag/` (16 bags) | OS1-64, `/os1_cloud_node/points` | 2657 s, 26 560 σαρώσεις | `ground_truth/registered_poses.csv`, πλήρης τροχιά (= το ήδη υπάρχον αρχείο) | **έτοιμη** (`--frame=ncd2020`) |
-| Newer College 2020 | dynamic_spinning | `newer_college/2020/dynamic_spinning/rosbag/` | OS1-64, `/os1_cloud_node/points` | 120 s, 1202 | `registered_poses.csv` + **`time_offsets.csv`** (53–57 ms, του dataset) | έτοιμη· απόφαση για το time offset |
+| Newer College 2020 | dynamic_spinning | `newer_college/2020/dynamic_spinning/rosbag/` | OS1-64, `/os1_cloud_node/points` | 120 s, 1202 | `registered_poses.csv` (+ `time_offsets.csv`: κάμερες ↔ IMU, **όχι** LiDAR ↔ GT) | **έτοιμη** (χωρίς offset) |
 | Hilti 2021 | LAB_Survey_2 | `hilti_2021/LAB_Survey_2/` | OS0-64 (2048 στήλες), `/os_cloud_node/points` | 136 s, 1357 | πυκνή τροχιά, **στο σύστημα του IMU** | **έτοιμη** (`evaluate_hilti.py`) |
 | Hilti 2021 | UZH_Tracking_Area_Run_2 | `hilti_2021/UZH_Tracking_Area_Run_2/` | ίδιο | 89 s, 895 | πυκνή τροχιά, σύστημα IMU | **έτοιμη** |
 | Hilti 2021 | Basement_1 | `hilti_2021/Basement_1/` | ίδιο | 113 s, 1130 | 5 σημεία ελέγχου (pole) | **έτοιμη** (`evaluate_hilti.py`, σημεία ελέγχου) |
@@ -63,8 +63,10 @@ python scripts/evaluate_ntu.py eee_03 <run dir> --out=<dir>
 ## Τι χρειάζεται πριν από τα τεστ
 1. ~~Hilti 2021: βαθμονόμηση + script~~ — έγινε 25/9 (πάνω). Το πανόραμα 64 × 2048 περνά σε 1024 στήλες (τα σημεία ανά στήλη ↓, λειτουργεί).
    Ανοιχτό: γιατί αποτυγχάνει η εικόνα στο UZH_Tracking_Area_Run_2.
-2. **dynamic_spinning:** το `time_offsets.csv` είναι η επίσημη χρονική διόρθωση του dataset (LiDAR ↔ GT)· απόφαση αν εφαρμόζεται (δεν είναι
-   αναζήτηση μετατόπισης, #061).
+2. ~~dynamic_spinning: time_offsets.csv~~ — **δεν αφορά την αξιολόγηση (25/9):** κατά το dataset είναι οι χρονικές μετατοπίσεις RealSense IMU /
+   Ouster IMU ως προς τις κάμερες RealSense (continuous-time calibration)· το GT είναι ανά σάρωση LiDAR, με χρονοσφραγίδες ακριβώς πάνω στις
+   σαρώσεις (0.000 ms, 1197 σαρώσεις). Αξιολόγηση χωρίς offset. Δοκιμή ±55 ms (Μ.Τ.): χειροτερεύει όλους τους βραχίονες και προς τις δύο κατευθύνσεις (#064). GT: 40 διπλές γραμμές — αφαιρούνται στο
+   `evaluate_ncd.load_gt`.
 3. ~~NTU VIRAL: script αξιολόγησης~~ — έγινε 25/9 (πάνω). Ανοιχτό: η εικόνα 16 γραμμών (31 % αποτυχίες)· eee_01/02 αποσυμπιεσμένες 25/9. Δίσκος συστήματος: 31 GB ελεύθερα. (Σελίδα του dataset: «πολλοί ξεχνούν τη μετατόπιση 0.4 m από το IMU στο πρίσμα, όπου
    μετράται το GT»· `leica_prism.yaml`: T_Body_Prism = (−0.294, −0.012, −0.273) m)· GT = `/leica/pose/relative` μέσα στο bag· δύο OS1-16, 16 ακτίνες
    = πανόραμα 16 γραμμών, πιθανό όριο της μεθόδου. eee_01/02: αποσυμπίεση στο ext4 μόλις τελειώσει η λήψη (47 GB ελεύθερα στο ext4).

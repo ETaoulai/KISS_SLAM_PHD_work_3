@@ -69,6 +69,12 @@ def load_gt(path, frame):
             t, T = load_tum(path)
     frame = frame or "none"
     T = base_to_lidar(T) if frame == "spires" else T @ FRAMES[frame]
+    # Exact duplicate stamps (NCD 2020 dynamic_spinning: 40 rows repeated with the same pose at the start and the end)
+    # break the SLERP of the GT; keep the first of each.  No other sequence has any.
+    _, first = np.unique(t, return_index=True)
+    if len(first) < len(t):
+        first = np.sort(first)
+        t, T = t[first], T[first]
     return t, T, frame
 
 

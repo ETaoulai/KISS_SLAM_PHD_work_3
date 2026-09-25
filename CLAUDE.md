@@ -11,6 +11,9 @@
 
 **Εκκρεμότητες και ανοιχτά προβλήματα (25/9): [`docs/open_tasks.md`](docs/open_tasks.md)** — από εκεί ξεκινά η επόμενη δουλειά.
 
+**Η μέθοδος αναλυτικά (εξισώσεις, κάθε επιλογή με την εγγραφή της): [`docs/method_description.md`](docs/method_description.md).** Ερώτημα
+θεωρητικής αξιολόγησης για ειδικό: [`docs/review_prompt_registration_deskew.md`](docs/review_prompt_registration_deskew.md).
+
 Μετά το [`docs/experiment_log.md`](docs/experiment_log.md), που περιέχει:
 - τον **Οδηγό εκτέλεσης** (πού/πώς τρέχει το pipeline, όλες οι CLI παράμετροι & config),
 - το **ιστορικό πειραμάτων** αναλυτικά (Στόχος → Μέθοδος → Αποτέλεσμα → Συμπέρασμα, νεότερα πρώτα).
