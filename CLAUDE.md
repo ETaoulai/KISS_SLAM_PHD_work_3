@@ -44,7 +44,8 @@ log. Ένα σημείο ανά είδος πληροφορίας — μην α�
   χτισμένο με OpenBLAS (όχι Accelerate).
 - **Linux 2** (`photogrammetry`), conda env `kiss-slam-main`, source `/home/photogrammetry/Kiss_SLAM-main`
   (git → GitHub `ETaoulai/KISS_SLAM_PHD_work_2`, private, remote `origin`, από 25/9· ο `after_two_start` ακολουθεί τον `origin/main`. Το παλιό
-  `ETaoulai/KISS_SLAM_PHD_work` είναι το remote `archive`, με τους κλάδους `main` … `gating`, σταματά στο `fa86f3b`). OpenCV χτισμένο με SURF.
+  `ETaoulai/KISS_SLAM_PHD_work` είναι το remote `archive`, με τους κλάδους `main` … `gating`, σταματά στο `fa86f3b`).
+  **Ο `main` δεν αλλάζει απευθείας (απόφαση Μ.Τ. 26/9):** κάθε νέα δουλειά σε δικό της κλάδο — τρέχων `vertical_drift` (από 26/9). OpenCV χτισμένο με SURF.
   Δεδομένα στο `/media/photogrammetry/A26C3DDF6C3DAF431/data/` (όχι στο `data/` του repo). Νέα datasets (NCD 2020 long / dynamic_spinning,
   Hilti 2021, NTU VIRAL) οργανωμένα ως σύνδεσμοι στο `/home/photogrammetry/kiss_data/` (ext4) — κατάσταση: `docs/datasets.md`.
 
