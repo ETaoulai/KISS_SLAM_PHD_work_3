@@ -28,7 +28,7 @@
 | | Linux (Μανόλης) | macOS arm64 (Λάζαρος) | Linux 2 (από 23/9) |
 |---|---|---|---|
 | **Host** | `photogrammetrylinux`, x86_64 | Apple Silicon (M-series) | `photogrammetry`, x86_64, 48 πυρήνες, 62 GB |
-| **Source dir** | `/home/photogrammetrylinux/kiss-slam-for-edit` | `/Users/lazaros/Code/PhD/Taoulai/Kiss_SLAM` | `/home/photogrammetry/Kiss_SLAM-main` (git → GitHub `ETaoulai/KISS_SLAM_PHD_work`, private) |
+| **Source dir** | `/home/photogrammetrylinux/kiss-slam-for-edit` | `/Users/lazaros/Code/PhD/Taoulai/Kiss_SLAM` | `/home/photogrammetry/Kiss_SLAM-main` (git → GitHub `ETaoulai/KISS_SLAM_PHD_work_2`, private· από 25/9, πριν `KISS_SLAM_PHD_work`) |
 | **Conda env** | `manos_kissslam_for_edit` (Py 3.11) | **`kissslam`** (Py 3.11) | `kiss-slam-main` (Py 3.11) |
 | **Build dir** | `build/cp311-cp311-linux_x86_64/` | `build/cp311-cp311-macosx_11_0_arm64/` | `build/cp311-cp311-linux_x86_64/` |
 | **Ενεργοποίηση** | `conda activate manos_kissslam_for_edit` | `conda activate kissslam` | `conda activate kiss-slam-main` |

@@ -40,7 +40,8 @@ log. Ένα σημείο ανά είδος πληροφορίας — μην α�
 - **macOS arm64**, conda env `kissslam`. ⚠️ Απαιτεί `scikit-build-core<1.0` και numpy
   χτισμένο με OpenBLAS (όχι Accelerate).
 - **Linux 2** (`photogrammetry`), conda env `kiss-slam-main`, source `/home/photogrammetry/Kiss_SLAM-main`
-  (git → GitHub `ETaoulai/KISS_SLAM_PHD_work`, private· κλάδοι `main` … `gating`, τρέχων κλάδος εργασίας `after_two_start` από 25/9). OpenCV χτισμένο με SURF.
+  (git → GitHub `ETaoulai/KISS_SLAM_PHD_work_2`, private, remote `origin`, από 25/9· ο `after_two_start` ακολουθεί τον `origin/main`. Το παλιό
+  `ETaoulai/KISS_SLAM_PHD_work` είναι το remote `archive`, με τους κλάδους `main` … `gating`, σταματά στο `fa86f3b`). OpenCV χτισμένο με SURF.
   Δεδομένα στο `/media/photogrammetry/A26C3DDF6C3DAF431/data/` (όχι στο `data/` του repo).
 
 ## Δομή
