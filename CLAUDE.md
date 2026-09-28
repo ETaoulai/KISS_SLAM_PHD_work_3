@@ -69,6 +69,8 @@ log. Ένα σημείο ανά είδος πληροφορίας — μην α�
   περιθώριο αλλαγής 2 % / 4 % (#062). Όχι indoor_detail, όχι ablations (εξομάλυνση στροφής, μόνο μετατόπιση) — `results_table.py --all-arms` για όλα.
 - `scripts/evaluate_hilti.py` — επίσημο πρωτόκολλο του Hilti SLAM Challenge 2021 (τροχιά IMU, pole/prism/imu, 1 s, SE(3), APE)· `docs/datasets.md`.
 - `scripts/evaluate_ntu.py` — επίσημο πρωτόκολλο του NTU VIRAL (σώμα + πρίσμα 0.40 m, 0.05 s, SE(3), ATE, πληρότητα)· `docs/datasets.md`.
+- `scripts/dump_failed_matches.py` — εικόνες (πανοράματα + αντιστοιχίσεις) κάθε σάρωσης όπου αποτυγχάνει η κίνηση της εικόνας →
+  `/home/photogrammetry/kiss_runs/failed_matches/` (ζήτημα Μ.Τ. 28/9)· κατά το run: `run_ncd.py --save-failed`.
 - `scripts/eval_motion_npz.py` — σφάλμα ενός αποθηκευμένου npz κίνησης έναντι GT, χωρίς επανεκτίμηση.
 - `scripts/measure_variance.sh` — διασπορά της μεθόδου (4 σπόροι × 2 τρόποι κατασκευής)· **τρέξ' το πριν από κάθε σύγκριση**.
 - `scripts/analyze_rig_mask.py` — τι είναι καρφωμένο στον σαρωτή (σκιές διάταξης, σιλουέτα χειριστή).

@@ -5,7 +5,7 @@
                               [--topic=/os_cloud_node/points] [--intensity-scale=0.249] [--diag]
                               [--parts=full|translation|rotation] [--rot-smooth=k] [--save-frames=<voxel m>] [--save-fraction=f]
                               [--gate [--gate-min=0] [--gate-rot=10] [--gate-drot=8]] [--fallback=identity|cv] [--two-start=<deg>|none] [--two-start-margin=0.02] [--range=fallback|candidate]
-                              [--rotation-weight=100]
+                              [--rotation-weight=100] [--save-failed]
 
 sequence: a 2020 sequence dir with raw_format/ouster_scan/*.pcd (kiss_slam/tools/ncd_pcd.py), or a
           .bag file, or a folder whose *.bag are ONE split sequence (read in time order; 2021 bags).
@@ -22,6 +22,8 @@ worker process, overlapping the ICP (image_deskew.parallel); same trajectory, le
 --save-fraction: only this random fraction of each scan's points (#049).
 --gate: plausibility gate on each image motion (>= gate-min matches, 0 = off by default; rotation <= gate-rot deg, change from the last
 accepted <= gate-drot deg), constant-velocity fallback, and the rejected / failed pairs saved in <out>/rejected_pairs (#054).
+--save-failed: for every scan whose intensity motion fails, both panoramas, their matches and a row in rejected.csv, in
+<out>/failed_matches (the images of scripts/dump_failed_matches.py, during the run).
 --diag: per-scan ICP diagnostics (a KD-tree over the local map per scan; off by default here, it
 does not change the trajectory).  For bags the written timestamps are the scans' header stamps
 (the loader's own are the bag record times), so the evaluation matches them to the ground truth.
@@ -67,6 +69,8 @@ def main():
             config.image_deskew.gate_max_rotation_change_deg = float(opts.get("gate-drot", 8.0))
             config.image_deskew.fallback = "constant_velocity"
             config.image_deskew.save_rejected_dir = str(out / "rejected_pairs")
+        if "--save-failed" in sys.argv:                          # panoramas + matches of every scan whose intensity motion failed
+            config.image_deskew.save_rejected_dir = str(out / "failed_matches")
         if "fallback" in opts:                                   # identity | constant_velocity (#057)
             config.image_deskew.fallback = {"cv": "constant_velocity"}.get(opts["fallback"], opts["fallback"])
         if "two-start" in opts:                                  # register twice when image and CV disagree (#057)
