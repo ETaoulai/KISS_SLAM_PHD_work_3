@@ -5,6 +5,7 @@
                               [--topic=/os_cloud_node/points] [--intensity-scale=0.249] [--diag]
                               [--parts=full|translation|rotation] [--rot-smooth=k] [--save-frames=<voxel m>] [--save-fraction=f]
                               [--gate [--gate-min=0] [--gate-rot=10] [--gate-drot=8]] [--fallback=identity|cv] [--two-start=<deg>|none] [--two-start-margin=0.02] [--range=fallback|candidate]
+                              [--rotation-weight=100]
 
 sequence: a 2020 sequence dir with raw_format/ouster_scan/*.pcd (kiss_slam/tools/ncd_pcd.py), or a
           .bag file, or a folder whose *.bag are ONE split sequence (read in time order; 2021 bags).
@@ -73,6 +74,8 @@ def main():
             config.image_deskew.two_start_deg = None if v.lower() in ("none", "off") else float(v)
         if "two-start-margin" in opts:                           # switch only when the fit is better by this fraction
             config.image_deskew.two_start_margin = float(opts["two-start-margin"])
+        if "rotation-weight" in opts:                            # rotation information of the node graph (#067)
+            config.pose_graph_optimizer.rotation_weight = float(opts["rotation-weight"])
         if "range" in opts:                                      # range-image motion: fallback | candidate (#058)
             config.image_deskew.range_motion = opts["range"]
         if "save-frames" in opts:

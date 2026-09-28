@@ -945,11 +945,16 @@ class KissSLAM:
                 out[i] = entry[0] / entry[1]
         return out
 
+    def _node_edge_information(self):
+        """Information of the node-graph edges: diag(1, 1, 1, w, w, w), w = pose_graph_optimizer.rotation_weight (#067)."""
+        w = float(self.config.pose_graph_optimizer.rotation_weight)
+        return np.diag([1.0, 1.0, 1.0, w, w, w])
+
     def compute_closures(self, query_id, query):
         accepted = self.closer.compute(query_id, query, self.local_map_graph)
         for source_id, target_id, pose_constraint in accepted:
             self.closures.append((source_id, target_id))
-            self.optimizer.add_factor(source_id, target_id, pose_constraint, np.eye(6))
+            self.optimizer.add_factor(source_id, target_id, pose_constraint, self._node_edge_information())
         if accepted:
             self.optimize_pose_graph()
 
@@ -987,7 +992,7 @@ class KissSLAM:
         self.voxel_grid.add_points(transformed_local_map)
         self.optimizer.add_variable(self.local_map_graph.last_id, self.local_map_graph.last_keypose)
         self.optimizer.add_factor(
-            self.local_map_graph.last_id, query_id, relative_motion, np.eye(6)
+            self.local_map_graph.last_id, query_id, relative_motion, self._node_edge_information()
         )
         self.compute_closures(query_id, query_points)
         if self.local_map_splitting_height is not None:

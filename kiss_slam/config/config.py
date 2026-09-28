@@ -263,6 +263,13 @@ class OccupancyMapperConfig(BaseModel):
 
 class PoseGraphOptimizerConfig(BaseModel):
     max_iterations: int = 10
+    # Information of the node-graph edges (odometry between local maps and loop closures): diag(1, 1, 1, w, w, w).
+    # 1 = upstream (identity).  g2o measures the rotation error as the quaternion vector (~theta/2), so with identity
+    # rotation is nearly free next to translation and, after a loop closure, the graph tilts its 100 m nodes to make the
+    # horizontal correction: NCD 2020 long experiment height error 0.19 m without closures, 2.1 m with them.  w = 100:
+    # two starts APE 2.11 -> 0.39 m in an offline replay of the back end, 01_short unchanged (#067).  The per-scan
+    # smoothing (fine_grained_optimization) keeps identity.
+    rotation_weight: float = 1.0
 
 
 class KissSLAMConfig(BaseSettings):
