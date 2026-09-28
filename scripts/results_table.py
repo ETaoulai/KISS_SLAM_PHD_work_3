@@ -97,7 +97,8 @@ ARMS = {"kissncd": "KISS-SLAM, kiss_icp NCD loader", "kissnodeskew": "KISS-SLAM,
         # #067 confirmation: pose-graph rotation weight x100 (only the sequences with loop closures)
         "kissrw": "KISS-SLAM, rotation weight 100", "kissnodeskewrw": "KISS-SLAM, no deskew, rotation weight 100",
         "siftrw": "i3 + SIFT, rotation weight 100", "surfrw": "i3 + SURF, rotation weight 100",
-        "surftworw": "i3 + SURF, two starting points, rotation weight 100"}
+        "surftworw": "i3 + SURF, two starting points, rotation weight 100",
+        "surftworangecand": "i3 + SURF, two starts + range image as third start"}
 # The arms compared from 25/9 on (decision M.T.): no indoor_detail, no ablations (rotation smoothed, translation only, ...).
 MAIN_ARMS = ["kiss", "kissnodeskew", "sift", "surf", "surftwo", "surftwom2", "surftwom4"]
 if "--all-arms" not in sys.argv:
