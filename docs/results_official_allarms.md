@@ -65,7 +65,7 @@ KISS-SLAM default config (the setting of the KISS-SLAM paper), except the arms "
 |  |  | i3 + SURF, two starting points, margin 2 % | 4 | 0.189 ± 0.012 | **6.38 ± 0.05** | 0.785 ± 0.006 | **6.60 ± 0.04** | **0.746 ± 0.008** | 451.9 ± 0.3 | +5.4 ± 0.1 | 0.110 ± 0.027 | 3 ± 1 | 1.00 ± 0.00 | +0.0999 ± 0.0000 | 0 |
 |  |  | i3 + SURF, two starting points, margin 4 % | 4 | 0.191 ± 0.011 | 6.45 ± 0.07 | 0.789 ± 0.006 | 6.67 ± 0.08 | 0.758 ± 0.007 | 452.2 ± 0.2 | +5.5 ± 0.0 | 0.115 ± 0.025 | 3 ± 1 | 1.00 ± 0.00 | +0.0999 ± 0.0000 | 0 |
 |  |  | i3 + SURF, two starting points, range image when intensity fails | 4 | 0.188 ± 0.013 | 6.40 ± 0.04 | 0.785 ± 0.008 | 6.60 ± 0.05 | 0.752 ± 0.009 | 452.1 ± 0.4 | +5.4 ± 0.1 | 0.111 ± 0.027 | 1 | 1.00 ± 0.00 | +0.0999 ± 0.0000 | 0 |
-| Newer College 2021 | math_easy (263 m) | KISS-SLAM, no deskew | 1 | **0.104** | **5.51** | **0.849** | **5.39** | **0.684** | 270.7 | +6.6 | 0.034 | — | 1.00 | +0.0475 | 1 |
+| Newer College 2021 | math_easy (263 m) | KISS-SLAM, no deskew | 1 | 0.104 | **5.51** | **0.849** | **5.39** | **0.684** | 270.7 | +6.6 | 0.034 | — | 1.00 | +0.0475 | 1 |
 |  |  | KISS-SLAM, indoor_detail | 1 | 0.173 | 12.06 | 2.331 | 10.17 | 1.710 | 291.1 | +10.5 | 0.065 | — | 1.00 | +0.0999 | 0 |
 |  |  | KISS-SLAM | 2 | 0.160 | 14.11 | 2.480 | 11.60 | 1.834 | 310.3 | +17.8 | 0.052 | — | 1.00 | +0.0999 | 0 |
 |  |  | i3 + SIFT | 4 | 0.116 ± 0.001 | 8.55 ± 0.03 | 1.335 ± 0.001 | 8.40 ± 0.02 | 1.199 ± 0.002 | 278.6 ± 0.1 | +5.7 ± 0.1 | 0.036 ± 0.001 | 3 ± 0 | 1.00 | +0.0999 | 0 |
@@ -78,6 +78,7 @@ KISS-SLAM default config (the setting of the KISS-SLAM paper), except the arms "
 |  |  | i3 + SURF, two starting points, margin 2 % | 4 | 0.107 ± 0.003 | 8.11 ± 0.01 | 1.278 ± 0.003 | 8.02 ± 0.01 | 1.139 ± 0.002 | 272.9 ± 0.2 | +3.6 ± 0.1 | 0.030 ± 0.001 | 1 | 1.00 | +0.0999 | 0 |
 |  |  | i3 + SURF, two starting points, margin 4 % | 4 | 0.108 ± 0.003 | 8.11 ± 0.01 | 1.280 ± 0.002 | 8.01 ± 0.01 | 1.140 ± 0.002 | 273.0 ± 0.1 | +3.6 ± 0.0 | 0.030 ± 0.001 | 1 | 1.00 ± 0.00 | +0.0999 ± 0.0000 | 0 |
 |  |  | i3 + SURF, two starting points, range image when intensity fails | 4 | 0.108 ± 0.001 | 8.10 ± 0.02 | 1.276 ± 0.003 | 7.99 ± 0.03 | 1.137 ± 0.002 | 272.8 ± 0.2 | +3.6 ± 0.1 | 0.031 ± 0.001 | 1 | 1.00 | +0.0999 | 0 |
+|  |  | i3 + SURF, two starting points, per-scan gain (#076) | 4 | **0.104 ± 0.002** | 7.92 ± 0.04 | 1.261 ± 0.001 | 7.87 ± 0.05 | 1.132 ± 0.001 | 271.8 ± 0.3 | +3.2 ± 0.1 | 0.030 ± 0.001 | 1 | 1.00 ± 0.00 | +0.0999 ± 0.0000 | 0 |
 | Newer College 2021 | underground_easy (162 m) | KISS-SLAM, no deskew | 1 | 0.092 | 6.52 | 0.853 | 6.49 | 0.787 | 171.2 | +5.5 | 0.027 | — | 1.00 | +0.0475 | 1 |
 |  |  | KISS-SLAM, indoor_detail | 1 | 0.067 | 7.17 | 2.164 | 6.14 | 1.646 | 176.0 | +8.4 | 0.045 | — | 1.00 | +0.0999 | 0 |
 |  |  | KISS-SLAM | 2 | 0.117 | 11.40 | 2.639 | 10.27 | 2.046 | 192.0 | +18.2 | 0.056 | — | 1.00 | +0.0999 | 0 |
@@ -131,9 +132,10 @@ KISS-SLAM default config (the setting of the KISS-SLAM paper), except the arms "
 |  |  | i3 + SURF, gated | 1 | 0.238 | 10.86 | 1.389 | 11.14 | 1.362 | 266.4 | +12.4 | 0.175 | 158 | 0.92 | +0.0999 | 0 |
 |  |  | i3 + SURF, gated 25/20 | 1 | 0.208 | 8.93 | 1.171 | 9.31 | 1.150 | 267.2 | +12.7 | 0.142 | 33 | 0.92 | +0.0999 | 0 |
 |  |  | i3 + SURF, two starting points | 4 | 0.221 ± 0.012 | 8.83 ± 0.08 | 1.139 ± 0.005 | 9.18 ± 0.04 | 1.112 ± 0.003 | 264.7 ± 0.4 | +11.7 ± 0.2 | 0.168 ± 0.017 | 33 ± 3 | 0.90 ± 0.00 | +0.0999 | 0 |
-|  |  | i3 + SURF, two starting points, margin 2 % | 4 | 0.217 ± 0.021 | 8.10 ± 0.04 | **1.064 ± 0.007** | **8.50 ± 0.02** | **1.040 ± 0.008** | 259.4 ± 0.7 | **+9.6 ± 0.3** | 0.163 ± 0.027 | 33 ± 3 | 0.89 ± 0.00 | +0.0999 ± 0.0000 | 0 |
-|  |  | i3 + SURF, two starting points, margin 4 % | 4 | 0.238 ± 0.014 | **8.10 ± 0.10** | 1.074 ± 0.011 | 8.52 ± 0.11 | 1.046 ± 0.011 | 259.8 ± 0.2 | +9.7 ± 0.1 | 0.187 ± 0.019 | 33 ± 3 | 0.89 ± 0.00 | +0.0999 ± 0.0000 | 0 |
+|  |  | i3 + SURF, two starting points, margin 2 % | 4 | 0.217 ± 0.021 | 8.10 ± 0.04 | **1.064 ± 0.007** | 8.50 ± 0.02 | **1.040 ± 0.008** | 259.4 ± 0.7 | +9.6 ± 0.3 | 0.163 ± 0.027 | 33 ± 3 | 0.89 ± 0.00 | +0.0999 ± 0.0000 | 0 |
+|  |  | i3 + SURF, two starting points, margin 4 % | 4 | 0.238 ± 0.014 | 8.10 ± 0.10 | 1.074 ± 0.011 | 8.52 ± 0.11 | 1.046 ± 0.011 | 259.8 ± 0.2 | +9.7 ± 0.1 | 0.187 ± 0.019 | 33 ± 3 | 0.89 ± 0.00 | +0.0999 ± 0.0000 | 0 |
 |  |  | i3 + SURF, two starting points, range image when intensity fails | 4 | 0.218 ± 0.012 | 8.16 ± 0.07 | 1.087 ± 0.008 | 8.53 ± 0.04 | 1.061 ± 0.004 | 260.4 ± 0.6 | +9.9 ± 0.3 | 0.167 ± 0.017 | 7 ± 0 | 0.90 ± 0.00 | +0.0999 ± 0.0000 | 0 |
+|  |  | i3 + SURF, two starting points, per-scan gain (#076) | 4 | 0.216 ± 0.021 | **7.96 ± 0.15** | 1.066 ± 0.014 | **8.32 ± 0.17** | 1.041 ± 0.010 | 258.4 ± 0.9 | **+9.0 ± 0.4** | 0.165 ± 0.019 | 21 ± 3 | 0.89 ± 0.00 | +0.0999 ± 0.0000 | 0 |
 | Newer College 2021 | math_medium (304 m) | KISS-SLAM, no deskew | 1 | 0.164 | **10.02** | **1.502** | **9.83** | **1.247** | 323.9 | +14.0 | 0.055 | — | 1.00 | +0.0475 | 1 |
 |  |  | KISS-SLAM, indoor_detail | 1 | 0.888 | 19.72 | 3.289 | 20.42 | 2.962 | 379.5 | +24.7 | 0.094 | — | 1.00 | +0.0999 | 0 |
 |  |  | KISS-SLAM | 1 | 0.253 | 21.49 | 3.275 | 21.49 | 2.943 | 408.5 | +34.3 | 0.097 | — | 1.00 | +0.0999 | 0 |
@@ -165,7 +167,7 @@ KISS-SLAM default config (the setting of the KISS-SLAM paper), except the arms "
 | Newer College 2021 | underground_hard (237 m) | KISS-SLAM, no deskew | 1 | 12.341 | 109.96 | 10.966 | 129.09 | 13.209 | 476.3 | +101.6 | 0.800 | — | 1.00 | +0.0475 | 1 |
 |  |  | KISS-SLAM, indoor_detail | 1 | 3.846 | 20.69 | 4.804 | 19.97 | 4.493 | 339.8 | +43.2 | 2.587 | — | 1.00 | +0.0999 | 0 |
 |  |  | KISS-SLAM | 1 | 12.781 | 241.62 | 17.241 | 295.04 | 20.038 | 890.2 | +275.2 | 0.550 | — | 1.00 | +0.0999 | 0 |
-|  |  | i3 + SIFT | 1 | 0.087 | 6.20 | 1.216 | 6.42 | 1.206 | 255.9 | +7.9 | **0.044** | 17 | 1.00 | +0.0999 | 0 |
+|  |  | i3 + SIFT | 1 | 0.087 | 6.20 | 1.216 | 6.42 | 1.206 | 255.9 | +7.9 | 0.044 | 17 | 1.00 | +0.0999 | 0 |
 |  |  | i3 + SURF | 4 | 0.087 ± 0.002 | 5.75 ± 0.04 | 1.100 ± 0.012 | 6.03 ± 0.02 | 1.075 ± 0.014 | 251.9 ± 0.4 | +6.2 ± 0.2 | 0.046 ± 0.000 | 1 ± 0 | 1.00 | +0.0999 | 0 |
 |  |  | i3 + SURF, translation only | 1 | 6.480 | 30.15 | 6.621 | 31.27 | 6.857 | 317.2 | +33.7 | 0.234 | 2 | 1.00 | +0.0999 | 0 |
 |  |  | i3 + SURF, rotation only | 1 | 0.123 | 6.93 | 1.102 | 7.21 | 1.076 | 248.8 | **+4.9** | 0.046 | 2 | 1.00 | +0.0999 | 0 |
@@ -179,6 +181,7 @@ KISS-SLAM default config (the setting of the KISS-SLAM paper), except the arms "
 |  |  | i3 + SURF, two starting points, margin 2 % | 4 | 0.086 ± 0.002 | 5.62 ± 0.03 | 1.087 ± 0.007 | 5.92 ± 0.02 | 1.055 ± 0.004 | 251.3 ± 0.4 | +5.9 ± 0.2 | 0.046 ± 0.001 | 1 ± 0 | 0.99 ± 0.00 | +0.0999 ± 0.0000 | 0 |
 |  |  | i3 + SURF, two starting points, margin 4 % | 4 | 0.088 ± 0.001 | 5.74 ± 0.07 | 1.088 ± 0.012 | 6.00 ± 0.07 | 1.054 ± 0.013 | 251.5 ± 0.2 | +6.0 ± 0.1 | 0.045 ± 0.001 | 1 ± 0 | 0.99 ± 0.00 | +0.0999 ± 0.0000 | 0 |
 |  |  | i3 + SURF, two starting points, range image when intensity fails | 4 | **0.086 ± 0.003** | 5.71 ± 0.10 | 1.090 ± 0.013 | 5.94 ± 0.07 | 1.052 ± 0.013 | 251.1 ± 0.3 | +5.9 ± 0.1 | 0.046 ± 0.001 | 1 | 0.98 ± 0.00 | +0.0999 ± 0.0000 | 0 |
+|  |  | i3 + SURF, two starting points, per-scan gain (#076) | 4 | 0.087 ± 0.001 | 5.69 ± 0.06 | 1.088 ± 0.006 | 5.95 ± 0.05 | 1.063 ± 0.002 | 250.6 ± 0.1 | +5.7 ± 0.0 | **0.044 ± 0.001** | 2 ± 1 | 0.98 ± 0.00 | +0.0999 ± 0.0000 | 0 |
 | Oxford Spires | keble-college-03 (283 m) | KISS-SLAM, no deskew | 1 | 11.370 | 25.16 | 2.219 | 21.72 | 1.778 | 483.5 | +70.6 | 0.635 | — | 1.00 | +0.0500 | 1 |
 |  |  | KISS-SLAM, indoor_detail | 1 | 0.854 | 44.37 | 3.715 | 37.67 | 3.287 | 643.3 | +127.7 | 0.286 | — | 0.74 | +0.0999 | 0 |
 |  |  | KISS-SLAM | 1 | 9.757 | 60.52 | 4.480 | 51.42 | 3.717 | 818.7 | +189.8 | 0.989 | — | 0.74 | +0.0999 | 0 |
@@ -270,6 +273,8 @@ KISS-SLAM default config (the setting of the KISS-SLAM paper), except the arms "
 |  |  | i3 + SURF, two starting points, intensity scale 1.0 (#075) | 4 | 0.058 ± 0.009 | — | — | — | — | — | — | — | 1 | 1.00 | — | — |
 |  |  | i3 + SURF, two starts + range fallback, intensity scale 1.0 (#075) | 4 | 0.058 ± 0.009 | — | — | — | — | — | — | — | 1 | 1.00 | — | — |
 |  |  | i3 + SURF, two starts + range as third start, intensity scale 1.0 (#075) | 4 | 0.060 ± 0.008 | — | — | — | — | — | — | — | 1 | 1.00 | — | — |
+|  |  | i3 + SURF, two starting points, per-scan gain (#076) | 4 | 0.052 ± 0.010 | — | — | — | — | — | — | — | 1 | 1.00 | — | — |
+|  |  | i3 + SURF, two starting points, per-scan gain, panorama 2048 (#076) | 4 | 0.052 ± 0.015 | — | — | — | — | — | — | — | 1 | 1.00 | — | — |
 | Hilti 2021 | IC_Office_1 | KISS-SLAM, no deskew | 1 | 1.655 | — | — | — | — | — | — | — | — | 1.00 | — | — |
 |  |  | KISS-SLAM | 1 | 6.344 | — | — | — | — | — | — | — | — | 1.00 | — | — |
 |  |  | i3 + SIFT | 4 | 0.098 ± 0.017 | — | — | — | — | — | — | — | 104 ± 3 | 1.00 | — | — |
@@ -279,6 +284,8 @@ KISS-SLAM default config (the setting of the KISS-SLAM paper), except the arms "
 |  |  | i3 + SURF, two starting points, intensity scale 1.0 (#075) | 4 | 0.076 ± 0.002 | — | — | — | — | — | — | — | 1 | 1.00 | — | — |
 |  |  | i3 + SURF, two starts + range fallback, intensity scale 1.0 (#075) | 4 | 0.076 ± 0.002 | — | — | — | — | — | — | — | 1 | 1.00 | — | — |
 |  |  | i3 + SURF, two starts + range as third start, intensity scale 1.0 (#075) | 4 | 0.074 ± 0.008 | — | — | — | — | — | — | — | 1 | 1.00 | — | — |
+|  |  | i3 + SURF, two starting points, per-scan gain (#076) | 4 | 0.074 ± 0.003 | — | — | — | — | — | — | — | 1 | 1.00 | — | — |
+|  |  | i3 + SURF, two starting points, per-scan gain, panorama 2048 (#076) | 4 | 0.072 ± 0.005 | — | — | — | — | — | — | — | 1 | 1.00 | — | — |
 | Hilti 2021 | Office_Mitte_1 | KISS-SLAM, no deskew | 1 | 0.575 | — | — | — | — | — | — | — | — | 1.00 | — | — |
 |  |  | KISS-SLAM | 1 | 4.286 | — | — | — | — | — | — | — | — | 1.00 | — | — |
 |  |  | i3 + SIFT | 4 | 4.400 ± 0.908 | — | — | — | — | — | — | — | 304 ± 4 | 1.00 | — | — |
@@ -289,6 +296,8 @@ KISS-SLAM default config (the setting of the KISS-SLAM paper), except the arms "
 |  |  | i3 + SURF, two starting points, intensity scale 1.0 (#075) | 4 | 0.282 ± 0.031 | — | — | — | — | — | — | — | 1 | 1.00 | — | — |
 |  |  | i3 + SURF, two starts + range fallback, intensity scale 1.0 (#075) | 4 | 0.282 ± 0.031 | — | — | — | — | — | — | — | 1 | 1.00 | — | — |
 |  |  | i3 + SURF, two starts + range as third start, intensity scale 1.0 (#075) | 4 | **0.202 ± 0.064** | — | — | — | — | — | — | — | 1 | 1.00 | — | — |
+|  |  | i3 + SURF, two starting points, per-scan gain (#076) | 4 | 0.226 ± 0.064 | — | — | — | — | — | — | — | 2 ± 1 | 1.00 | — | — |
+|  |  | i3 + SURF, two starting points, per-scan gain, panorama 2048 (#076) | 4 | 0.315 ± 0.041 | — | — | — | — | — | — | — | 1 | 1.00 | — | — |
 | Hilti 2021 | Construction_Site_1 | KISS-SLAM, no deskew | 1 | 0.062 | — | — | — | — | — | — | — | — | 1.00 | — | — |
 |  |  | KISS-SLAM | 1 | 0.063 | — | — | — | — | — | — | — | — | 1.00 | — | — |
 |  |  | i3 + SIFT | 4 | 0.058 ± 0.007 | — | — | — | — | — | — | — | 1193 ± 2 | 1.00 | — | — |
@@ -298,6 +307,8 @@ KISS-SLAM default config (the setting of the KISS-SLAM paper), except the arms "
 |  |  | i3 + SURF, two starting points, intensity scale 1.0 (#075) | 4 | 0.043 ± 0.002 | — | — | — | — | — | — | — | 17 ± 1 | 1.00 | — | — |
 |  |  | i3 + SURF, two starts + range fallback, intensity scale 1.0 (#075) | 4 | 0.044 ± 0.007 | — | — | — | — | — | — | — | 2 | 1.00 | — | — |
 |  |  | i3 + SURF, two starts + range as third start, intensity scale 1.0 (#075) | 4 | **0.041 ± 0.006** | — | — | — | — | — | — | — | 17 ± 1 | 1.00 | — | — |
+|  |  | i3 + SURF, two starting points, per-scan gain (#076) | 4 | 0.045 ± 0.003 | — | — | — | — | — | — | — | 14 ± 1 | 1.00 | — | — |
+|  |  | i3 + SURF, two starting points, per-scan gain, panorama 2048 (#076) | 4 | 0.046 ± 0.002 | — | — | — | — | — | — | — | 9 ± 2 | 1.00 | — | — |
 | Hilti 2021 | LAB_Survey_2 | KISS-SLAM, no deskew | 1 | 0.050 | — | — | — | — | — | — | — | — | — | — | — |
 |  |  | KISS-SLAM | 1 | 0.062 | — | — | — | — | — | — | — | — | — | — | — |
 |  |  | i3 + SIFT | 4 | 0.037 ± 0.000 | — | — | — | — | — | — | — | 2 ± 1 | — | — | — |
@@ -307,6 +318,8 @@ KISS-SLAM default config (the setting of the KISS-SLAM paper), except the arms "
 |  |  | i3 + SURF, two starting points, intensity scale 1.0 (#075) | 4 | 0.035 ± 0.000 | — | — | — | — | — | — | — | 1 | — | — | — |
 |  |  | i3 + SURF, two starts + range fallback, intensity scale 1.0 (#075) | 4 | 0.035 ± 0.000 | — | — | — | — | — | — | — | 1 | — | — | — |
 |  |  | i3 + SURF, two starts + range as third start, intensity scale 1.0 (#075) | 4 | **0.035 ± 0.000** | — | — | — | — | — | — | — | 1 | — | — | — |
+|  |  | i3 + SURF, two starting points, per-scan gain (#076) | 4 | 0.035 ± 0.000 | — | — | — | — | — | — | — | 1 | — | — | — |
+|  |  | i3 + SURF, two starting points, per-scan gain, panorama 2048 (#076) | 4 | 0.036 ± 0.000 | — | — | — | — | — | — | — | 1 | — | — | — |
 | Hilti 2021 | UZH_Tracking_Area_Run_2 | KISS-SLAM, no deskew | 1 | **0.204** | — | — | — | — | — | — | — | — | — | — | — |
 |  |  | KISS-SLAM | 1 | 0.585 | — | — | — | — | — | — | — | — | — | — | — |
 |  |  | i3 + SIFT | 4 | 1.289 ± 0.523 | — | — | — | — | — | — | — | 678 ± 3 | — | — | — |
@@ -317,6 +330,8 @@ KISS-SLAM default config (the setting of the KISS-SLAM paper), except the arms "
 |  |  | i3 + SURF, two starting points, intensity scale 1.0 (#075) | 4 | 0.576 ± 0.000 | — | — | — | — | — | — | — | 90 ± 4 | — | — | — |
 |  |  | i3 + SURF, two starts + range fallback, intensity scale 1.0 (#075) | 4 | 0.579 ± 0.001 | — | — | — | — | — | — | — | 34 ± 2 | — | — | — |
 |  |  | i3 + SURF, two starts + range as third start, intensity scale 1.0 (#075) | 4 | 0.575 ± 0.000 | — | — | — | — | — | — | — | 90 ± 4 | — | — | — |
+|  |  | i3 + SURF, two starting points, per-scan gain (#076) | 4 | 0.576 ± 0.002 | — | — | — | — | — | — | — | 64 ± 5 | — | — | — |
+|  |  | i3 + SURF, two starting points, per-scan gain, panorama 2048 (#076) | 4 | 0.579 ± 0.000 | — | — | — | — | — | — | — | 31 ± 4 | — | — | — |
 | NTU VIRAL | eee_01 | KISS-SLAM, no deskew | 1 | 2.363 | — | — | — | — | — | — | — | — | 1.00 | — | — |
 |  |  | KISS-SLAM | 1 | 2.678 | — | — | — | — | — | — | — | — | 1.00 | — | — |
 |  |  | i3 + SIFT | 4 | **1.400 ± 0.172** | — | — | — | — | — | — | — | 1327 ± 9 | 1.00 | — | — |
@@ -327,6 +342,7 @@ KISS-SLAM default config (the setting of the KISS-SLAM paper), except the arms "
 |  |  | i3 + SURF, two starting points, intensity scale 1.0 (#075) | 4 | 2.034 ± 0.052 | — | — | — | — | — | — | — | 660 ± 11 | 1.00 | — | — |
 |  |  | i3 + SURF, two starts + range fallback, intensity scale 1.0 (#075) | 4 | 1.613 ± 0.244 | — | — | — | — | — | — | — | 370 ± 9 | 1.00 | — | — |
 |  |  | i3 + SURF, two starts + range as third start, intensity scale 1.0 (#075) | 4 | 1.992 ± 0.129 | — | — | — | — | — | — | — | 660 ± 11 | 1.00 | — | — |
+|  |  | i3 + SURF, two starting points, per-scan gain (#076) | 4 | 1.944 ± 0.167 | — | — | — | — | — | — | — | 696 ± 13 | 1.00 | — | — |
 | NTU VIRAL | eee_02 | KISS-SLAM, no deskew | 1 | 1.490 | — | — | — | — | — | — | — | — | 1.00 | — | — |
 |  |  | KISS-SLAM | 1 | 1.486 | — | — | — | — | — | — | — | — | 1.00 | — | — |
 |  |  | i3 + SIFT | 4 | 3.952 ± 2.174 | — | — | — | — | — | — | — | 1044 ± 3 | 1.00 | — | — |
@@ -337,6 +353,7 @@ KISS-SLAM default config (the setting of the KISS-SLAM paper), except the arms "
 |  |  | i3 + SURF, two starting points, intensity scale 1.0 (#075) | 4 | 1.101 ± 0.126 | — | — | — | — | — | — | — | 368 ± 6 | 1.00 | — | — |
 |  |  | i3 + SURF, two starts + range fallback, intensity scale 1.0 (#075) | 4 | 0.927 ± 0.090 | — | — | — | — | — | — | — | 168 ± 4 | 1.00 | — | — |
 |  |  | i3 + SURF, two starts + range as third start, intensity scale 1.0 (#075) | 4 | 1.101 ± 0.126 | — | — | — | — | — | — | — | 368 ± 6 | 1.00 | — | — |
+|  |  | i3 + SURF, two starting points, per-scan gain (#076) | 4 | 0.877 ± 0.077 | — | — | — | — | — | — | — | 401 ± 3 | 1.00 | — | — |
 | NTU VIRAL | eee_03 | KISS-SLAM, no deskew | 1 | 0.841 | — | — | — | — | — | — | — | — | 1.00 | — | — |
 |  |  | KISS-SLAM | 1 | 0.864 | — | — | — | — | — | — | — | — | 1.00 | — | — |
 |  |  | i3 + SIFT | 4 | 0.471 ± 0.043 | — | — | — | — | — | — | — | 786 ± 3 | 1.00 | — | — |
@@ -347,3 +364,4 @@ KISS-SLAM default config (the setting of the KISS-SLAM paper), except the arms "
 |  |  | i3 + SURF, two starting points, intensity scale 1.0 (#075) | 4 | 0.435 ± 0.080 | — | — | — | — | — | — | — | 360 ± 3 | 1.00 | — | — |
 |  |  | i3 + SURF, two starts + range fallback, intensity scale 1.0 (#075) | 4 | 0.367 ± 0.043 | — | — | — | — | — | — | — | 195 ± 4 | 1.00 | — | — |
 |  |  | i3 + SURF, two starts + range as third start, intensity scale 1.0 (#075) | 4 | 0.435 ± 0.084 | — | — | — | — | — | — | — | 360 ± 3 | 1.00 | — | — |
+|  |  | i3 + SURF, two starting points, per-scan gain (#076) | 4 | 0.679 ± 0.061 | — | — | — | — | — | — | — | 404 ± 9 | 1.00 | — | — |
