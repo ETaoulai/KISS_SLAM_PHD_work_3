@@ -567,6 +567,7 @@ class ScanMotionEstimator:
             self.range_detector = make_detector("surf", range_hessian)
             self.range_rng = np.random.default_rng(seed + 1000)
             self.prev_range = None
+            self.prev_raw = None                  # "fallback": the previous raw scan, for a lazy range motion
         self.last_range_motion = None
         self.n_range_used = 0
 
@@ -602,7 +603,27 @@ class ScanMotionEstimator:
         return M, n
 
     def _range(self, xyz, ts, ring, M, n):
-        """The motion from the range panorama (#058), after the intensity estimate and its gate."""
+        """The motion from the range panorama (#058), after the intensity estimate and its gate.
+
+        "fallback" is lazy (branch fast_fallback): only the previous raw scan is kept, and both range panoramas, their
+        matches and the fit are computed only when the intensity motion failed (M is None).  The eager version built and
+        matched the range panorama on every scan and discarded it whenever the intensity motion succeeded: up to 1.9x the
+        run time on sequences that never needed it.  The range RANSAC now draws only on failed scans, so its motions
+        differ from the eager version as another seed would.  "candidate" needs the range motion on every scan: eager."""
+        if self.range_motion == "fallback":
+            prev_raw, self.prev_raw = self.prev_raw, (xyz, ts, ring)
+            self.last_range_motion = None
+            if M is not None or prev_raw is None:
+                return M, n
+            prev_r = range_features(*prev_raw, self.range_detector)
+            cur_r = range_features(xyz, ts, ring, self.range_detector)
+            _, Mr, nr = match_motion(prev_r, cur_r, self.period, self.range_rng, self.bf, self.model, self.subpixel,
+                                     self.stuck_min, self.floor_only, self.elev, self.range_)
+            self.last_range_motion = Mr
+            if Mr is not None:
+                self.n_range_used += 1
+                return Mr, nr
+            return M, n
         cur_r = range_features(xyz, ts, ring, self.range_detector)
         prev_r, self.prev_range = self.prev_range, cur_r
         self.last_range_motion = None
