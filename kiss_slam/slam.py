@@ -392,6 +392,8 @@ class KissSLAM:
                     save_rejected_dir=self.image_cfg.save_rejected_dir,
                     range_motion=self.image_cfg.range_motion,
                     range_hessian=self.image_cfg.range_hessian,
+                    intensity_normalisation=self.image_cfg.intensity_normalisation,
+                    panorama_width=self.image_cfg.panorama_width,
                     model=self.image_cfg.model,
                     subpixel=self.image_cfg.subpixel,
                     stuck_min=self.image_cfg.stuck_min,

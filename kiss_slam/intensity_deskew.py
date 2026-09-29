@@ -383,11 +383,21 @@ def make_detector(detector="sift", surf_hessian=100.0, surf_upright=False):
     raise ValueError(f"unknown detector {detector!r}: 'sift' or 'surf'")
 
 
-def features(xyz, ts, inten, ring, detector):
+def features(xyz, ts, inten, ring, detector, normalisation="none", _clahe=[]):
     """Panorama + keypoints/descriptors (SIFT or SURF, see make_detector) of one raw scan:
-    (P, T, valid, keypoints, descriptors, t_start, panorama image).  match_motion uses the first six."""
+    (P, T, valid, keypoints, descriptors, t_start, panorama image).  match_motion uses the first six.
+
+    normalisation (#075): "none" = the intensity as given (after the estimator's fixed intensity_scale); "gain" = this scan's
+    intensity scaled so that its 99th percentile (points beyond MIN_RANGE) is 255; "gain_clahe" = gain, then local contrast
+    equalisation of the image (CLAHE 3.0, tiles 4 x 16, as the range image, #058)."""
     ok = ~np.isnan(xyz).any(axis=1) & (np.linalg.norm(xyz, axis=1) > MIN_RANGE)
+    if normalisation in ("gain", "gain_clahe") and ok.any():
+        inten = inten * (255.0 / max(float(np.percentile(inten[ok], 99)), 1e-6))
     big, P, T, valid = panorama(xyz[ok], ts[ok], inten[ok], ring[ok])
+    if normalisation == "gain_clahe":
+        if not _clahe:
+            _clahe.append(cv2.createCLAHE(clipLimit=3.0, tileGridSize=(4, 16)))
+        big = _clahe[0].apply(big)
     kps, desc = detector.detectAndCompute(big, None)
     return P, T, valid, kps, desc, ts[ok].min(), big
 
@@ -518,7 +528,8 @@ class ScanMotionEstimator:
                  stuck_min=_DEFAULT, floor_only=_DEFAULT, elev=_DEFAULT, range_=_DEFAULT,
                  detector="sift", surf_hessian=100.0, surf_upright=False, intensity_scale=1.0,
                  gate_min_matches=None, gate_max_rotation_deg=None, gate_max_rotation_change_deg=None,
-                 save_rejected_dir=None, range_motion=None, range_hessian=10.0):
+                 save_rejected_dir=None, range_motion=None, range_hessian=10.0,
+                 intensity_normalisation="none", panorama_width=None):
         """`stuck_min`, `floor_only`, `elev`, `range_`: the stuck-match filter (#025-#027);
         left at their defaults they read the module globals STUCK_* at each call.
         `detector`, `surf_hessian`, `surf_upright`: the panorama features, see make_detector.
@@ -532,6 +543,12 @@ class ScanMotionEstimator:
         `range_hessian`, own RNG so the intensity estimate is unchanged): "fallback" returns it when the intensity motion
         failed or was rejected; "candidate" only keeps it in self.last_range_motion (a starting point for the ICP)."""
         self.period, self.model, self.subpixel = period, model, subpixel
+        # #075: per-scan intensity normalisation (replaces the fixed intensity_scale when not "none") and the panorama
+        # columns (module-wide W, so every panorama of this process; None = keep W, 1024).  2048 = the Hilti Ouster's own.
+        self.intensity_normalisation = intensity_normalisation
+        if panorama_width is not None:
+            global W
+            W = int(panorama_width)
         self.intensity_scale = intensity_scale
         self.stuck_min, self.floor_only, self.elev, self.range_ = stuck_min, floor_only, elev, range_
         self.detector_name = detector
@@ -556,9 +573,9 @@ class ScanMotionEstimator:
     def motion(self, xyz, ts, inten, ring):
         self.k += 1
         self.last_reason = None
-        if self.intensity_scale != 1.0:
+        if self.intensity_scale != 1.0 and self.intensity_normalisation == "none":
             inten = inten * self.intensity_scale
-        cur = features(xyz, ts, inten, ring, self.detector)
+        cur = features(xyz, ts, inten, ring, self.detector, self.intensity_normalisation)
         prev, self.prev = self.prev, cur
         self.last_params, self.last_t_start = None, cur[5]
         if prev is None:

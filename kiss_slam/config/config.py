@@ -185,6 +185,11 @@ class ImageDeskewConfig(BaseModel):
     # Motion from the RANGE panorama too (#058; log range + CLAHE, SURF at range_hessian): "fallback" = used when the
     # intensity motion fails or is rejected; "candidate" = an extra starting point for the two-start registration.
     range_motion: Optional[Literal["fallback", "candidate"]] = None
+    # Intensity of the panorama (#075): "none" = intensity x intensity_scale (every result before #075); "gain" = per scan,
+    # scaled so its 99th percentile is 255 (no per-sensor scale; Hilti failures 447 -> 60 on UZH); "gain_clahe" = gain +
+    # local contrast equalisation.  Panorama columns: None = 1024 (every result before #075); 2048 = the Hilti Ouster's own.
+    intensity_normalisation: Literal["none", "gain", "gain_clahe"] = "none"
+    panorama_width: Optional[int] = None
     range_hessian: float = 10.0
     # Folder for the panoramas + matches of every failed / rejected scan (rejected.csv lists them).  None = off.
     save_rejected_dir: Optional[str] = None
