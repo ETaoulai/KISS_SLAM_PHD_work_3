@@ -6,7 +6,7 @@
                               [--parts=full|translation|rotation] [--rot-smooth=k] [--save-frames=<voxel m>] [--save-fraction=f]
                               [--gate [--gate-min=0] [--gate-rot=10] [--gate-drot=8]] [--fallback=identity|cv] [--two-start=<deg>|none] [--two-start-margin=0.02] [--range=fallback|candidate]
                               [--rotation-weight=100] [--save-failed]
-                              [--normalise=gain|gain_clahe] [--panorama-width=2048]
+                              [--normalise=gain|gain_clahe] [--panorama-width=2048] [--image-start=false]
 
 sequence: a 2020 sequence dir with raw_format/ouster_scan/*.pcd (kiss_slam/tools/ncd_pcd.py), or a
           .bag file, or a folder whose *.bag are ONE split sequence (read in time order; 2021 bags).
@@ -79,6 +79,8 @@ def main():
             config.image_deskew.two_start_deg = None if v.lower() in ("none", "off") else float(v)
         if "two-start-margin" in opts:                           # switch only when the fit is better by this fraction
             config.image_deskew.two_start_margin = float(opts["two-start-margin"])
+        if "image-start" in opts:                                # false: ICP starts from constant velocity, image only deskews (#030)
+            config.image_deskew.use_as_initial_guess = opts["image-start"].lower() not in ("false", "0", "no", "off")
         if "normalise" in opts:                                  # per-scan intensity normalisation: gain | gain_clahe (#075)
             config.image_deskew.intensity_normalisation = opts["normalise"]
         if "panorama-width" in opts:                             # panorama columns, e.g. 2048 for the Hilti Ouster (#075)
