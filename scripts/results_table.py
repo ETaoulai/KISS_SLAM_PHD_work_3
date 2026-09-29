@@ -98,7 +98,10 @@ ARMS = {"kissncd": "KISS-SLAM, kiss_icp NCD loader", "kissnodeskew": "KISS-SLAM,
         "kissrw": "KISS-SLAM, rotation weight 100", "kissnodeskewrw": "KISS-SLAM, no deskew, rotation weight 100",
         "siftrw": "i3 + SIFT, rotation weight 100", "surfrw": "i3 + SURF, rotation weight 100",
         "surftworw": "i3 + SURF, two starting points, rotation weight 100",
-        "surftworangecand": "i3 + SURF, two starts + range image as third start"}
+        "surftworangecand": "i3 + SURF, two starts + range image as third start",
+        "surftwos1": "i3 + SURF, two starting points, intensity scale 1.0 (#075)",
+        "surftworangefbs1": "i3 + SURF, two starts + range fallback, intensity scale 1.0 (#075)",
+        "surftworangecands1": "i3 + SURF, two starts + range as third start, intensity scale 1.0 (#075)"}
 # The arms compared from 25/9 on (decision M.T.): no indoor_detail, no ablations (rotation smoothed, translation only, ...).
 MAIN_ARMS = ["kiss", "kissnodeskew", "sift", "surf", "surftwo", "surftwom2", "surftwom4"]
 if "--all-arms" not in sys.argv:
