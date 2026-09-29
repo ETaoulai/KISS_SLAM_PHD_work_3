@@ -5,11 +5,11 @@
 **Διάβασε ΠΡΩΤΑ το [`docs/STATUS.md`](docs/STATUS.md)**: τι ξέρουμε (συμπεράσματα με
 ημερομηνία), πού στοχεύουμε, τι είναι κλειστό, και λεξιλόγιο. Είναι η σύντομη εικόνα του έργου.
 
-Σύνοψη της πορείας για τον Μ.Τ. (19/9, ενημερωμένη 21/9): [`docs/summary_for_MT.md`](docs/summary_for_MT.md).
+Σύνοψη της πορείας για τον Μ.Τ. (19/9, ενημερωμένη 21/9, 25/9 και 29/9 — §7δ): [`docs/summary_for_MT.md`](docs/summary_for_MT.md).
 Το §7β της σύνοψης έχει τα νεότερα ευρήματα (#033–#039) — **πρώτο απ' όλα: το ATE ενός run δεν είναι μετρήσιμο
 μέγεθος** (σ = 0.02–0.04 m), οπότε κάθε σύγκριση γίνεται με RPE/μήκος διαδρομής ή με 4+ runs.
 
-**Εκκρεμότητες και ανοιχτά προβλήματα (25/9): [`docs/open_tasks.md`](docs/open_tasks.md)** — από εκεί ξεκινά η επόμενη δουλειά.
+**Εκκρεμότητες και ανοιχτά προβλήματα (29/9): [`docs/open_tasks.md`](docs/open_tasks.md)** — από εκεί ξεκινά η επόμενη δουλειά.
 
 **Η μέθοδος αναλυτικά (εξισώσεις, κάθε επιλογή με την εγγραφή της): [`docs/method_description.md`](docs/method_description.md).** Ερώτημα
 θεωρητικής αξιολόγησης για ειδικό: [`docs/review_prompt_registration_deskew.md`](docs/review_prompt_registration_deskew.md).
@@ -45,7 +45,7 @@ log. Ένα σημείο ανά είδος πληροφορίας — μην α�
 - **Linux 2** (`photogrammetry`), conda env `kiss-slam-main`, source `/home/photogrammetry/Kiss_SLAM-main`
   (git → GitHub `ETaoulai/KISS_SLAM_PHD_work_2`, private, remote `origin`, από 25/9· ο `after_two_start` ακολουθεί τον `origin/main`. Το παλιό
   `ETaoulai/KISS_SLAM_PHD_work` είναι το remote `archive`, με τους κλάδους `main` … `gating`, σταματά στο `fa86f3b`).
-  **Ο `main` δεν αλλάζει απευθείας (απόφαση Μ.Τ. 26/9):** κάθε νέα δουλειά σε δικό της κλάδο — τρέχων `vertical_drift` (από 26/9). OpenCV χτισμένο με SURF.
+  **Ο `main` δεν αλλάζει απευθείας (απόφαση Μ.Τ. 26/9):** κάθε νέα δουλειά σε δικό της κλάδο — τρέχων `fast_fallback` (29/9· αλυσίδα `vertical_drift` → `intensity_norm` → `vertical_constraint` → `fast_fallback`). OpenCV χτισμένο με SURF.
   Δεδομένα στο `/media/photogrammetry/A26C3DDF6C3DAF431/data/` (όχι στο `data/` του repo). Νέα datasets (NCD 2020 long / dynamic_spinning,
   Hilti 2021, NTU VIRAL) οργανωμένα ως σύνδεσμοι στο `/home/photogrammetry/kiss_data/` (ext4) — κατάσταση: `docs/datasets.md`.
 
