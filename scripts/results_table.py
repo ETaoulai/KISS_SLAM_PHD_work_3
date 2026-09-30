@@ -2,9 +2,11 @@
 """All results in one table: every sequence x arm, mean ± σ over its runs, against the ground truth.
 
     python scripts/results_table.py [<data root>] [--out=<prefix>] [--all-arms] [--extra=/home/photogrammetry/kiss_runs]
+                                    [--runs=<dir>[,<dir>...]]
                                     [--legacy [--offset=best]]
 
 Reads the run folders under <data root>/runs (default /media/photogrammetry/A26C3DDF6C3DAF431/data) and under <extra>,
+and under every --runs dir (same layout as <extra>, e.g. the external SSD of #081; read only, nothing is written there),
 and writes <prefix>.md and <prefix>.csv (on ext4: the NTFS data disk is read-only, #052).
 Sequences: Newer College 2020 01_short (#041), 2021 (#043, #052), Oxford Spires (#044, #052): 16 in all.
 
@@ -38,6 +40,8 @@ OFFSET = "best" if LEGACY and "--offset=best" in sys.argv else 0.0
 OFFICIAL = not LEGACY
 NC, RUNS = ROOT / "newer_college", ROOT / "runs"
 EXTRA = Path(next((a.split("=", 1)[1] for a in sys.argv[1:] if a.startswith("--extra=")), "/home/photogrammetry/kiss_runs"))
+# More run roots with the layout of EXTRA (#081: the external exFAT SSD), read only.
+MORE_RUNS = [Path(d) for a in sys.argv[1:] if a.startswith("--runs=") for d in a.split("=", 1)[1].split(",") if d]
 # Written to EXTRA (ext4), never to the NTFS data disk: ntfs3 kernel BUG on writes (#046, #052; decision M.T. 24/9).
 OUT = Path(next((a.split("=", 1)[1] for a in sys.argv[1:] if a.startswith("--out=")),
                 EXTRA / ("results_official" if OFFICIAL else "results_all_best_offset" if OFFSET == "best" else "results_all")))
@@ -105,7 +109,10 @@ ARMS = {"kissncd": "KISS-SLAM, kiss_icp NCD loader", "kissnodeskew": "KISS-SLAM,
         "surftwogain": "i3 + SURF, two starting points, per-scan gain (#076)",
         "surftwogainw": "i3 + SURF, two starting points, per-scan gain, panorama 2048 (#076)",
         "surftworangefbfast": "i3 + SURF, two starting points, fast range fallback (#078)",
-        "surftwofull": "i3 + SURF, two starts + gain + fast range fallback + rotation weight 100 (#079)"}
+        "surftwofull": "i3 + SURF, two starts + gain + fast range fallback + rotation weight 100 (#079)",
+        "surftwofbnostuck": "i3 + SURF, two starts + range fallback, no near-floor stuck-match filter (ablation #081)",
+        "surftwofbadaptive": "i3 + SURF, two starts + range fallback, KISS adaptive sigma instead of fixed 2.0 (ablation #081)",
+        "surftwofbcvstart": "i3 + SURF, two starts + range fallback, image motion for deskew only, ICP from constant velocity (ablation #081)"}
 # The arms compared from 25/9 on (decision M.T.): no indoor_detail, no ablations (rotation smoothed, translation only, ...).
 MAIN_ARMS = ["kiss", "kissnodeskew", "sift", "surf", "surftwo", "surftwom2", "surftwom4"]
 if "--all-arms" not in sys.argv:
@@ -172,10 +179,12 @@ def main():
         # Also the same folder under EXTRA (runs written to ext4 after the ntfs3 kernel bug, #046); a run counts
         # only if its log ends with the "wall" line of /usr/bin/time, i.e. it finished (the crashed ones did not).
         found = {}
-        for base in (folder, EXTRA / folder.relative_to(RUNS)):
+        for base in (folder, *(r / folder.relative_to(RUNS) for r in (EXTRA, *MORE_RUNS))):
             for p in (sorted(base.glob("*_*")) if base.exists() else []):
                 log = p.parent / f"{p.name}.log"
-                if p.is_dir() and log.exists() and "\nwall " in log.read_text(errors="replace").replace("\r", "\n"):
+                # ... and it wrote a trajectory: a crashed run also has the "wall" line (the exFAT symlink crash of #081)
+                if (p.is_dir() and log.exists() and "\nwall " in log.read_text(errors="replace").replace("\r", "\n")
+                        and any(p.glob("*/*_poses_tum.txt"))):
                     found[p.name] = p
         runs = [found[k] for k in sorted(found)]
         if not runs:

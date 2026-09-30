@@ -7,6 +7,7 @@
                               [--gate [--gate-min=0] [--gate-rot=10] [--gate-drot=8]] [--fallback=identity|cv] [--two-start=<deg>|none] [--two-start-margin=0.02] [--range=fallback|candidate]
                               [--rotation-weight=100] [--save-failed]
                               [--normalise=gain|gain_clahe] [--panorama-width=2048] [--image-start=false]
+                              [--stuck=none|<m>] [--sigma=adaptive|<m>]
 
 sequence: a 2020 sequence dir with raw_format/ouster_scan/*.pcd (kiss_slam/tools/ncd_pcd.py), or a
           .bag file, or a folder whose *.bag are ONE split sequence (read in time order; 2021 bags).
@@ -25,6 +26,8 @@ worker process, overlapping the ICP (image_deskew.parallel); same trajectory, le
 accepted <= gate-drot deg), constant-velocity fallback, and the rejected / failed pairs saved in <out>/rejected_pairs (#054).
 --save-failed: for every scan whose intensity motion fails, both panoramas, their matches and a row in rejected.csv, in
 <out>/failed_matches (the images of scripts/dump_failed_matches.py, during the run).
+--stuck / --sigma: ablations of the paper (open_tasks D) - the near-floor stuck-match filter off (image_deskew.stuck_min = None,
+#025-#027) and the KISS adaptive threshold instead of the fixed sigma 2.0 (image_deskew.fixed_sigma = None, #031).
 --diag: per-scan ICP diagnostics (a KD-tree over the local map per scan; off by default here, it
 does not change the trajectory).  For bags the written timestamps are the scans' header stamps
 (the loader's own are the bag record times), so the evaluation matches them to the ground truth.
@@ -89,6 +92,12 @@ def main():
             config.pose_graph_optimizer.rotation_weight = float(opts["rotation-weight"])
         if "range" in opts:                                      # range-image motion: fallback | candidate (#058)
             config.image_deskew.range_motion = opts["range"]
+        if "stuck" in opts:                                      # near-floor stuck-match filter: none = off (ablation)
+            v = opts["stuck"]
+            config.image_deskew.stuck_min = None if v.lower() in ("none", "off") else float(v)
+        if "sigma" in opts:                                      # adaptive = KISS adaptive threshold instead of fixed (ablation)
+            v = opts["sigma"]
+            config.image_deskew.fixed_sigma = None if v.lower() == "adaptive" else float(v)
         if "save-frames" in opts:
             config.diagnostics.save_deskewed_voxel = float(opts["save-frames"])
             config.diagnostics.save_deskewed_fraction = float(opts.get("save-fraction", 1.0))

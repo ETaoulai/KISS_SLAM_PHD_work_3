@@ -163,6 +163,23 @@ class SlamPipeline(OdometryPipeline):
         else:
             print("KissSLAM| Dataset does not use patching; intensity/ring unavailable from reader.")
 
+    @staticmethod
+    def _get_results_dir(out_dir: str):
+        """kiss_icp's results folder, but the "latest" link is optional: exFAT has no symbolic links, and the upstream
+        os.symlink ran only after the whole run and killed it before any result was written (all 324 runs of #081)."""
+        import datetime
+
+        results_dir = os.path.join(os.path.realpath(out_dir), datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S"))
+        latest_dir = os.path.join(os.path.realpath(out_dir), "latest")
+        os.makedirs(results_dir, exist_ok=True)
+        try:
+            if os.path.lexists(latest_dir):
+                os.unlink(latest_dir)
+            os.symlink(results_dir, latest_dir)
+        except OSError as e:
+            print(f"KissSLAM| no 'latest' link in {out_dir} ({e.strerror}); results in {results_dir}")
+        return results_dir
+
     def run(self):
         self._run_pipeline()
         self._run_evaluation()

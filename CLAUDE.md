@@ -67,7 +67,9 @@ log. Ένα σημείο ανά είδος πληροφορίας — μην α�
 - `scripts/evaluate_official.py` — **η ΜΟΝΗ αξιολόγηση από 25/9 (#061, ΑΠΟΦΑΣΗ Μ.Τ.):** πρωτόκολλο evo του Oxford Spires (APE `--align --t_max_diff 0.01`,
   RPE 1 m / 1 s), κάθε θέση στη στιγμή που αντιπροσωπεύει, **χωρίς μετατόπιση χρόνου**. Για όλο τον πίνακα: `results_table.py` (προεπιλογή).
   Τα `evaluate_ncd.py` / `evaluate_gt.py` / `results_table.py --legacy` μόνο για αναπαραγωγή παλιών πινάκων.
-- **Επιλογές, όχι προεπιλογή (ΑΠΟΦΑΣΗ Μ.Τ. 28/9):** εικόνα απόστασης ως εφεδρεία (`--range=fallback`, #069/#071) και βάρος στροφής του γράφου
+- **Μέθοδος του paper (ΑΠΟΦΑΣΗ Μ.Τ. 29/9): δύο αρχές + εφεδρεία εικόνας απόστασης** (`surftworangefb`)· ablation στο #081, `docs/results_ablation_081.md`.
+  Runs από 29/9 στον εξωτερικό SSD (exFAT, `~/kiss_runs_ssd`, χωρίς symbolic links): `results_table.py --runs=/home/photogrammetry/kiss_runs_ssd`.
+- **Επιλογές, όχι προεπιλογή (ΑΠΟΦΑΣΗ Μ.Τ. 28/9):** εικόνα απόστασης ως εφεδρεία (`--range=fallback`, #069/#071· μέρος της μεθόδου του paper) και βάρος στροφής του γράφου
   (`--rotation-weight=100`, #067/#070)· βραχίονες `surftworangefb`, `*rw` στο `results_table.py --all-arms`.
 - **Βραχίονες σύγκρισης (ΑΠΟΦΑΣΗ Μ.Τ. 25/9):** KISS-SLAM · KISS-SLAM χωρίς deskew · i3 + SIFT · i3 + SURF · i3 + SURF δύο αρχές · δύο αρχές με
   περιθώριο αλλαγής 2 % / 4 % (#062). Όχι indoor_detail, όχι ablations (εξομάλυνση στροφής, μόνο μετατόπιση) — `results_table.py --all-arms` για όλα.
