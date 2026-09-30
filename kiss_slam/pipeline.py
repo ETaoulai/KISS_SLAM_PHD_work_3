@@ -115,6 +115,7 @@ class SlamPipeline(OdometryPipeline):
                 else f"IMAGE-MOTION DESKEW ({img.model}{', subpixel' if img.subpixel else ''}"
                      f"{f', stuck {img.stuck_min:g}' if img.stuck_min is not None else ''}"
                      f"{' floor-only' if img.stuck_min is not None and img.stuck_floor_only else ''}"
+                     f"{', NO deskew' if not img.use_for_deskew else ''}"
                      f"{', + ICP initial guess' if img.use_as_initial_guess else ''}"
                      f", sigma {'fixed ' + format(img.fixed_sigma, 'g') if img.fixed_sigma is not None else 'adaptive'}"
                      f", motion {'online, ' + img.detector.upper() + (', parallel' if img.parallel else '') if img.motion_file is None else img.motion_file})"

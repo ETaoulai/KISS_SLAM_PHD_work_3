@@ -154,6 +154,9 @@ class ImageDeskewConfig(BaseModel):
     stuck_range_m: float = 5.0
     # Also use the image motion as the ICP initial guess (#030).  False = deskew only.
     use_as_initial_guess: bool = True
+    # Use the image motion to deskew the scan (#082).  False = the scan is not deskewed and the image motion is only the ICP
+    # initial guess (with use_as_initial_guess); the counterpart of use_as_initial_guess = False (deskew only, #081).
+    use_for_deskew: bool = True
     # Adaptive threshold: fixed at this value (m) for the whole run (#031).
     # None = KISS adaptive (updated from the ICP correction of the initial guess).
     fixed_sigma: Optional[float] = 2.0

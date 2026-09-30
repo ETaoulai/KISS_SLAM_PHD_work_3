@@ -792,8 +792,8 @@ class KissSLAM:
             delta = np.eye(4)
             start = odo.last_delta if self.image_cfg.fallback == "constant_velocity" else delta
         else:
-            delta = M
-            start = delta if self.image_cfg.use_as_initial_guess else odo.last_delta
+            delta = M if self.image_cfg.use_for_deskew else np.eye(4)      # False: ICP start only, no deskew (#082)
+            start = M if self.image_cfg.use_as_initial_guess else odo.last_delta
         fixed_sigma = self.image_cfg.fixed_sigma
         sigma = odo.adaptive_threshold.get_threshold() if fixed_sigma is None else float(fixed_sigma)
 

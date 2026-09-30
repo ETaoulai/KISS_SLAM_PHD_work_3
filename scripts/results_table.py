@@ -112,7 +112,10 @@ ARMS = {"kissncd": "KISS-SLAM, kiss_icp NCD loader", "kissnodeskew": "KISS-SLAM,
         "surftwofull": "i3 + SURF, two starts + gain + fast range fallback + rotation weight 100 (#079)",
         "surftwofbnostuck": "i3 + SURF, two starts + range fallback, no near-floor stuck-match filter (ablation #081)",
         "surftwofbadaptive": "i3 + SURF, two starts + range fallback, KISS adaptive sigma instead of fixed 2.0 (ablation #081)",
-        "surftwofbcvstart": "i3 + SURF, two starts + range fallback, image motion for deskew only, ICP from constant velocity (ablation #081)"}
+        "surftwofbcvstart": "i3 + SURF, two starts + range fallback, image motion for deskew only, ICP from constant velocity (ablation #081)",
+        "surftwofbnodeskew": "i3 + SURF, two starts + range fallback, image motion as ICP start only, no deskew (#082)",
+        "genz": "GenZ-ICP (odometry, own config, #083)", "mad": "MAD-ICP (odometry, own config, #083)",
+        "trajlo": "Traj-LO (continuous-time odometry, own config, #083)"}
 # The arms compared from 25/9 on (decision M.T.): no indoor_detail, no ablations (rotation smoothed, translation only, ...).
 MAIN_ARMS = ["kiss", "kissnodeskew", "sift", "surf", "surftwo", "surftwom2", "surftwom4"]
 if "--all-arms" not in sys.argv:
