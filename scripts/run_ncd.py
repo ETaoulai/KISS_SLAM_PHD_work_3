@@ -10,7 +10,8 @@
                               [--stuck=none|<m>] [--sigma=adaptive|<m>] [--deskew=false]
 
 sequence: a 2020 sequence dir with raw_format/ouster_scan/*.pcd (kiss_slam/tools/ncd_pcd.py), or a
-          .bag file, or a folder whose *.bag are ONE split sequence (read in time order; 2021 bags).
+          .bag file, or a folder whose *.bag are ONE split sequence (read in time order; 2021 bags), or a KITTI raw
+          drive dir with velodyne_points/ (kiss_slam/tools/kitti_raw.py; --first / --last: scan range, --intensity-scale=255).
 arm:  kiss  upstream KISS-SLAM (image_deskew off)
       sift  image-motion deskew (i3), SIFT features on the intensity panorama
       surf  image-motion deskew (i3), SURF features (OpenCV with OPENCV_ENABLE_NONFREE)
@@ -53,6 +54,9 @@ def main():
     if is_bag:
         from kiss_icp.datasets.rosbag import RosbagDataset
         dataset = RosbagDataset(seq, opts.get("topic", "/os_cloud_node/points"))
+    elif (seq / "velodyne_points").is_dir():                # KITTI raw drive, sync or extract (#084)
+        from kiss_slam.tools.kitti_raw import KittiRaw
+        dataset = KittiRaw(seq, int(opts.get("first", 0)), int(opts["last"]) if "last" in opts else None)
     else:
         from kiss_slam.tools.ncd_pcd import NewerCollege2020Pcd
         dataset = NewerCollege2020Pcd(seq)
