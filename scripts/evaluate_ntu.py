@@ -65,8 +65,26 @@ def score(t_gt, P_gt, Q_gt, t, P_body, R_body):
     gt = PoseTrajectory3D(P_gt, Q_gt, t_gt)
     est_a, gt_a = sync.associate_trajectories(est, gt, max_diff=MAX_DIFF)
     if est_a.num_poses != est.num_poses:
+        # Only a denser estimate than one pose per scan (Traj-LO: every 40 ms, #083) gets here: evo's association drops
+        # poses and the notebook would pair est and GT out of step.  Then, and only then, keep per GT sample the closest
+        # pose and associate again.  Every one-pose-per-scan run passes the check above unchanged: the official numbers
+        # (a first version applied this always and moved NTU APE by up to 0.4 %, corrected 1/10).
+        nearest = np.array([np.argmin(np.abs(t_gt - s)) for s in t])
+        for g in np.unique(nearest[near]):
+            same = np.flatnonzero(near & (nearest == g))
+            if len(same) > 1:
+                near[same] = False
+                near[same[np.argmin(np.abs(t[same] - t_gt[g]))]] = True
+        q_wxyz = Rotation.from_matrix(R[near]).as_quat()[:, [3, 0, 1, 2]]
+        est = PoseTrajectory3D(P[near], q_wxyz, t[near])
+        est_a, gt_a = sync.associate_trajectories(est, gt, max_diff=MAX_DIFF)
+    if est_a.num_poses != est.num_poses:
         raise RuntimeError("association dropped estimate samples: the notebook would pair est and GT out of step")
-    est.align(gt_a)                                                   # step 4 (evo: SE(3), no scale)
+    try:
+        est.align(gt_a)                                               # step 4 (evo: SE(3), no scale)
+    except Exception as e:                                            # evo GeometryException: an estimate that never moved
+        print(f"alignment impossible ({e}): scored as a failure")     # (CT-ICP driving profile on eee_01, #083)
+        return dict(ate=float("inf"), ate_raw=float("nan"), completeness=0.0, n=est.num_poses)
     ape = metrics.APE(metrics.PoseRelation.translation_part)
     ape.process_data((gt_a, est))
     ate = float(ape.get_result(ref_name="reference", est_name="estimate").stats["rmse"])

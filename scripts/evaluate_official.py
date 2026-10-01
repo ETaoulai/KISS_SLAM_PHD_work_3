@@ -13,6 +13,7 @@ i.e. the translation APE (RMSE) after a rigid SE(3) Umeyama alignment, estimate 
   rpe_t   evo RPE, translation, delta 1 m, all pairs, pairs from the reference [cm]
   rpe_r   the same pairs, rotation angle                                        [deg]
   rpe1s_* the same relative error over 1 s (rpe_seconds: evo has no time step), as the RPE 1 s of #037-#060
+  rte/rre the KITTI relative error over 100-800 m sub-trajectories, % and deg/100 m (#083); NaN below 100 m of path
   path    length of the associated estimate, gt_path of the associated GT; z_rmse after the alignment
 
 The time offset (#045, #046).  Every stamp in the GT files is the instant of the pose.  The scan stamps of the Hesai and
@@ -148,6 +149,14 @@ def evaluate_official(gt_t, gt_T, run, frame, out_dir=None, verbose=False):
     rpe_t = rpe(tr, 1.0, metrics.Unit.meters, True, True)
     rpe_r = rpe(rot, 1.0, metrics.Unit.meters, True, True)
     rpe1s_t, rpe1s_r = rpe_seconds(ref_a, est_a, 1.0)
+    # RTE / RRE (#083): the KITTI odometry metric most LiDAR-odometry papers report (KISS-ICP, CT-ICP, Traj-LO) - the relative
+    # translation error in % and rotation error in deg per 100 m, averaged over all sub-trajectories of 100, 200, ... 800 m
+    # (kiss_icp.metrics.sequence_error, start every 10 poses), on the same associated pose pairs.  Undefined below 100 m of path.
+    rte = rre = float("nan")
+    if ref_a.path_length >= 100.0:
+        from kiss_icp.metrics import sequence_error
+        rte, rre = sequence_error(np.array(ref_a.poses_se3), np.array(est_a.poses_se3))
+        rre *= 100.0                                     # deg/m -> deg/100 m
 
     est_al = PoseTrajectory3D(poses_se3=list(est_a.poses_se3), timestamps=est_a.timestamps)
     est_al.align(ref_a, correct_scale=False)            # evo_ape --align: Umeyama SE(3)
@@ -159,6 +168,7 @@ def evaluate_official(gt_t, gt_T, run, frame, out_dir=None, verbose=False):
         exact_times=float(source == "exact"),
         ate=float(ape.get_statistic(metrics.StatisticsType.rmse)),
         rpe_t=rpe_t * 100, rpe_r=rpe_r, rpe1s_t=rpe1s_t * 100, rpe1s_r=rpe1s_r,
+        rte=float(rte), rre=float(rre),
         path=float(est_a.path_length), gt_path=float(ref_a.path_length),
         z_rmse=float(np.sqrt((z ** 2).mean())),
         pose_minus_stamp=float(np.median(t - load_tum(find_tum(run))[0])),
@@ -166,7 +176,8 @@ def evaluate_official(gt_t, gt_T, run, frame, out_dir=None, verbose=False):
 
 
 COLS = [("ate", "APE [m]", "{:.3f}"), ("rpe_t", "RPE 1 m [cm]", "{:.2f}"), ("rpe_r", "RPE 1 m [deg]", "{:.3f}"),
-        ("rpe1s_t", "RPE 1 s [cm]", "{:.2f}"), ("rpe1s_r", "RPE 1 s [deg]", "{:.3f}"), ("path", "path [m]", "{:.1f}"),
+        ("rpe1s_t", "RPE 1 s [cm]", "{:.2f}"), ("rpe1s_r", "RPE 1 s [deg]", "{:.3f}"), ("rte", "RTE [%]", "{:.2f}"),
+        ("rre", "RRE [deg/100m]", "{:.3f}"), ("path", "path [m]", "{:.1f}"),
         ("z_rmse", "z RMSE [m]", "{:.3f}"), ("matched", "assoc.", "{:.3f}"), ("gt_interp", "GT interp", "{:.0f}"),
         ("pose_minus_stamp", "pose-stamp [s]", "{:+.4f}")]
 

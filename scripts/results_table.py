@@ -115,7 +115,12 @@ ARMS = {"kissncd": "KISS-SLAM, kiss_icp NCD loader", "kissnodeskew": "KISS-SLAM,
         "surftwofbcvstart": "i3 + SURF, two starts + range fallback, image motion for deskew only, ICP from constant velocity (ablation #081)",
         "surftwofbnodeskew": "i3 + SURF, two starts + range fallback, image motion as ICP start only, no deskew (#082)",
         "genz": "GenZ-ICP (odometry, own config, #083)", "mad": "MAD-ICP (odometry, own config, #083)",
-        "trajlo": "Traj-LO (continuous-time odometry, own config, #083)"}
+        "trajlo": "Traj-LO (continuous-time odometry, own config, #083)",
+        "surftworangefbodo": "i3 + SURF, two starts + range fallback, odometry only (no loop closures, replay_backend none, #083)",
+        "cticp": "CT-ICP (continuous-time odometry, robust low-inertia profile, #083)",
+        "cticpdriving": "CT-ICP (continuous-time odometry, driving profile, #083)",
+        "coinlio": "COIN-LIO (LiDAR-inertial, intensity + IMU, reference, #083)",
+        "fastlio": "FAST-LIO2 (LiDAR-inertial, reference, #083)"}
 # The arms compared from 25/9 on (decision M.T.): no indoor_detail, no ablations (rotation smoothed, translation only, ...).
 MAIN_ARMS = ["kiss", "kissnodeskew", "sift", "surf", "surftwo", "surftwom2", "surftwom4"]
 if "--all-arms" not in sys.argv:
@@ -125,13 +130,14 @@ METRICS = [("ate", "ATE [m]", "{:.3f}"), ("rpe_t", "RPE 1 s [cm]", "{:.2f}"), ("
            ("kitti", "KITTI [%]", "{:.2f}"), ("fail", "image fails", "{:.0f}"), ("offset", "time shift [s]", "{:+.3f}")]
 if OFFICIAL:
     METRICS = [("ate", "APE [m]", "{:.3f}"), ("rpe_t", "RPE 1 m [cm]", "{:.2f}"), ("rpe_r", "RPE 1 m [°]", "{:.3f}"),
-               ("rpe1s_t", "RPE 1 s [cm]", "{:.2f}"), ("rpe1s_r", "RPE 1 s [°]", "{:.3f}"), ("path", "path [m]", "{:.1f}"),
+               ("rpe1s_t", "RPE 1 s [cm]", "{:.2f}"), ("rpe1s_r", "RPE 1 s [°]", "{:.3f}"), ("rte", "RTE [%]", "{:.2f}"),
+               ("rre", "RRE [°/100 m]", "{:.3f}"), ("path", "path [m]", "{:.1f}"),
                ("excess", "path vs GT [%]", "{:+.1f}"), ("z_rmse", "z RMSE [m]", "{:.3f}"), ("fail", "image fails", "{:.0f}"),
                ("matched", "assoc.", "{:.2f}"), ("pose_minus_stamp", "pose − stamp [s]", "{:+.4f}"), ("gt_interp", "GT interp.", "{:.0f}")]
 
 
 CACHE_VERSION = 1      # bump when evaluate_ncd.evaluate changes what it computes
-OFFICIAL_VERSION = 4   # bump when evaluate_official.evaluate_official changes what it computes
+OFFICIAL_VERSION = 6   # bump when evaluate_official.evaluate_official changes what it computes (5: RTE/RRE; 6: NTU association fix only when needed, #083)
 
 
 def cached_evaluate(gt, frame, gt_t, gt_T, run):
@@ -163,7 +169,7 @@ def cached_evaluate(gt, frame, gt_t, gt_T, run):
         m = re.search(r"image motion: \d+/\d+ scans \((\d+) fell back", log.read_text(errors="replace")) if log.exists() else None
         v["fail"] = float(m[1]) if m else float("nan")
         v = {k: float(v.get(k, float("nan"))) for k in
-             ("ate", "rpe_t", "rpe_r", "rpe1s_t", "rpe1s_r", "path", "gt_path", "z_rmse", "fail", "matched", "pose_minus_stamp", "gt_interp")}
+             ("ate", "rpe_t", "rpe_r", "rpe1s_t", "rpe1s_r", "rte", "rre", "path", "gt_path", "z_rmse", "fail", "matched", "pose_minus_stamp", "gt_interp")}
     elif OFFICIAL:
         v = evaluate_official(gt_t, gt_T, run, frame, EXTRA / "official_eval" / run.parent.name)
         m = re.search(r"image motion: \d+/\d+ scans \((\d+) fell back", log.read_text(errors="replace")) if log.exists() else None

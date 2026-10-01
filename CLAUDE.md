@@ -73,6 +73,8 @@ log. Ένα σημείο ανά είδος πληροφορίας — μην α�
   (`--rotation-weight=100`, #067/#070)· βραχίονες `surftworangefb`, `*rw` στο `results_table.py --all-arms`.
 - **Βραχίονες σύγκρισης (ΑΠΟΦΑΣΗ Μ.Τ. 25/9):** KISS-SLAM · KISS-SLAM χωρίς deskew · i3 + SIFT · i3 + SURF · i3 + SURF δύο αρχές · δύο αρχές με
   περιθώριο αλλαγής 2 % / 4 % (#062). Όχι indoor_detail, όχι ablations (εξομάλυνση στροφής, μόνο μετατόπιση) — `results_table.py --all-arms` για όλα.
+- `baselines/` + `scripts/run_baseline.py` / `lio_to_tum.py` / `extract_lio_topics.py` — οι άλλες μέθοδοι της σύγκρισης (#083: GenZ-ICP, MAD-ICP,
+  CT-ICP, Traj-LO, FAST-LIO2, COIN-LIO), με pinned commits και patches· `baselines/README.md`.
 - `scripts/evaluate_hilti.py` — επίσημο πρωτόκολλο του Hilti SLAM Challenge 2021 (τροχιά IMU, pole/prism/imu, 1 s, SE(3), APE)· `docs/datasets.md`.
 - `scripts/evaluate_ntu.py` — επίσημο πρωτόκολλο του NTU VIRAL (σώμα + πρίσμα 0.40 m, 0.05 s, SE(3), ATE, πληρότητα)· `docs/datasets.md`.
 - `scripts/dump_failed_matches.py` — εικόνες (πανοράματα + αντιστοιχίσεις) κάθε σάρωσης όπου αποτυγχάνει η κίνηση της εικόνας →

@@ -535,6 +535,77 @@ SIFT και RoMa. Υπάρχει αυτοβαθμονομούμενη διόρθ
 
 ---
 
+### 2026-10-01 — #083 Σύγκριση με άλλες μεθόδους στις 27: λιγότερο ακριβής από Traj-LO / FAST-LIO2 / COIN-LIO, ισάξια με GenZ-ICP / CT-ICP, η μόνη χωρίς καμία αποτυχία
+
+**Σχετικά:** #061 (επίσημο πρωτόκολλο), #081–#082 · κλάδος `after_080` · στήσιμο και patches: `baselines/README.md` · scripts
+`scripts/run_baseline.py`, `scripts/lio_to_tum.py`, `scripts/extract_lio_topics.py` · launchers `kiss_runs/{baselines083,cticp083,cticprobust083,lio083,lio083b}_launch.sh`
+· runs `~/kiss_runs_ssd/<ακολουθία>/{genz,mad,trajlo,cticp,cticpdriving,fastlio,fastlioblind1,coinlio,surftworangefbodo}_s0` · πίνακες
+`kiss_runs/results_official_allarms_083.{md,csv}`, `kiss_runs/comparisons_083.txt` · σύνοψη `docs/summary_for_LG_2026-10-01.md`
+
+#### Στόχος
+Για το paper (open_tasks §Δ, πρώτο κενό): άλλες μέθοδοι στα ίδια δεδομένα με το ίδιο πρωτόκολλο. Μόνο LiDAR: GenZ-ICP (RA-L 2025),
+MAD-ICP (RA-L 2024), CT-ICP (ICRA 2022) και Traj-LO (RA-L 2024) — οι δύο τελευταίες συνεχούς χρόνου, οι πραγματικοί ανταγωνιστές
+(`literature_i3.md`). Ζήτημα Μ.Τ. 1/10: και μέθοδοι με IMU ως αναφορά — FAST-LIO2 και COIN-LIO (ICRA 2024, intensity + IMU, το πλησιέστερο
+προηγούμενο έργο).
+
+#### Μέθοδος
+- **Ρυθμίσεις:** η δημοσιευμένη ρύθμιση των συγγραφέων για κάθε dataset (GenZ-ICP pretuned· MAD-ICP dataset cfg· Traj-LO `config_{ouster,ntu,hesai}`·
+  CT-ICP profile· FAST-LIO2 `ouster64` / `velodyne` με τη βαθμονόμηση LiDAR–IMU κάθε dataset: `/tf_static` του NCD 2020, `configs/sensor.yaml`
+  του Spires, NTU· COIN-LIO `mapping_newer_college.launch`). Όπου η ρύθμιση αποτυγχάνει προφανώς, δεύτερη ρύθμιση των ίδιων συγγραφέων: CT-ICP
+  driving (11.8 Hz) → robust_low_inertia (αποτυγχάνει το driving σε σχεδόν όλες τις χειροκίνητες: 01_short 464 m, math_medium 488 m)·
+  FAST-LIO2 stairs blind 4 → 1 m.
+- **Ίδια είσοδος:** GenZ-ICP, MAD-ICP, CT-ICP διαβάζουν από τους δικούς μας readers (stamp κεφαλίδας, πλαίσιο LiDAR)· Traj-LO και οι LIO από τα bags
+  (Traj-LO: χρόνος σημείου Ouster = header + t όπως ο δικός μας reader, όχι header − 0.1 s). Χρόνος κάθε θέσης για το #061: GenZ / MAD χωρίς
+  deskew → μέσος χρόνος σάρωσης (`config.yml` deskew false, όπως ο «KISS χωρίς deskew»)· Traj-LO, CT-ICP, LIO → ακριβής χρόνος
+  (`*_poses_posetime_tum.txt`). LIO: θέση IMU → θέση LiDAR με τον εξωτερικό προσανατολισμό του config.
+- **Δική μας για δίκαιη σύγκριση:** όλες οι άλλες είναι odometry μόνο → και η δική μας χωρίς κλεισίματα βρόχου (`replay_backend.py <run> none`,
+  βραχίονας `surftworangefbodo`, 108 runs)· διαφέρει από το SLAM μόνο σε 01_short και long experiment.
+- **Τεχνικά:** Traj-LO, CT-ICP, FAST-LIO2 με μικρά patches (headless runner, stream από pipe, Hesai reader· `baselines/patches/`). Spires / Hilti
+  bz2 → πρώτα μόνο τα topics LiDAR + IMU (το `rosbag play` δεν προλάβαινε, το FAST-LIO2 δεν έπαιρνε σαρώσεις). Runs σε μονάδες systemd με
+  όριο μνήμης (το Traj-LO στα 46 GB σκότωσε στις 30/9 όλες τις διεργασίες της εφαρμογής· `OOMPolicy=continue` χρειάζεται, αλλιώς σταματά όλη η μονάδα).
+- **Νέα μετρική RTE / RRE** (KITTI, `kiss_icp.metrics.sequence_error`, 100–800 m, % και °/100 m) στο `evaluate_official.py`· μόνο σε διαδρομή
+  ≥ 100 m (16 ακολουθίες NCD / Spires). **Διόρθωση NTU:** σε πυκνή εκτίμηση (Traj-LO, ανά 40 ms) το evo έχανε θέσεις → μία θέση ανά δείγμα GT,
+  **μόνο όταν αποτυγχάνει η επίσημη αντιστοίχιση**· μια πρώτη εκδοχή το εφάρμοζε πάντα και μετακινούσε το NTU APE ως 0.4 % — διορθώθηκε,
+  3992 τιμές ίδιες με τον πίνακα του #082. Τροχιά που δεν κινείται (CT-ICP driving, eee_01) → αποτυχία, όχι κατάρρευση του πίνακα.
+
+#### Αποτέλεσμα
+
+| μέθοδος | διάμεσος APE [m] | διάμεσος RPE 1 m [cm] | διάμεσος RTE [%] / RRE [°/100 m] | ακολουθίες | αποτυχίες (APE > 5 m) |
+|---|---|---|---|---|---|
+| **δική μας** (SLAM / odometry) | 0.19 / 0.19 | 8.1 | 0.43 / 1.07 | 27 | **0** (χειρότερη stairs 2.07) |
+| KISS-SLAM | 0.42 | 21.4 | 0.92 / 2.38 | 27 | 3 |
+| GenZ-ICP | 0.15 | 8.0 | 0.38 / 0.91 | 27 | 1 (dynamic_spinning 15.6) |
+| MAD-ICP | 0.45 | 5.2 | 0.55 / 1.02 | 26 (segfault στο long) | 3 |
+| CT-ICP (robust) | 0.13 | 5.9 | 0.45 / 1.16 | 27 | 3 (christ-church-02 21.8, underground_hard 9.6, dynamic_spinning 10.8) |
+| Traj-LO | 0.07 | 2.5 | 0.20 / 0.74 | 25 (01_short .pcd· long > 46 GB) | 1 (Office_Mitte_1 1632) |
+| FAST-LIO2 (IMU) | 0.08 | 2.4 | 0.23 / 0.88 | 26 (01_short χωρίς bag) | 1 (stairs 733· blind 1 m: 97) |
+| COIN-LIO (IMU) | 0.05 | 2.7 | 0.23 / 1.02 | 9 (μόνο Ouster OS0-128, NCD 2021) | 0 |
+
+Ζεύγη Wilcoxon, η δική μας odometry έναντι (νίκες δικής μας – άλλης, p· έναντι KISS-SLAM το SLAM):
+
+| έναντι | APE | RPE 1 m | RTE |
+|---|---|---|---|
+| KISS-SLAM | 25–2, −42 %, < 0.0001 | 17–1 | 16–0, −45 % |
+| GenZ-ICP | 12–15, 0.90 | 10–8, 0.52 | 6–10, +23 %, 0.02 |
+| MAD-ICP | 20–6, −57 %, 0.002 | 4–13, 0.15 | 11–4, 0.08 |
+| CT-ICP | 10–17, 0.56 | 5–13, 0.44 | 5–11, 0.53 |
+| Traj-LO | 3–22, +78 %, 0.005 | 0–16, +137 % | 0–14, +54 % |
+| FAST-LIO2 | 3–23, +78 %, 0.0004 | 1–16 | 0–15, +36 % |
+| COIN-LIO | 0–9, 0.004 | 0–9 | 0–8 |
+
+Ταχύτητα / μνήμη (όχι σε ίδιες συνθήκες φόρτου): CT-ICP robust 0.4–1.3 Hz με 16 νήματα (18 ώρες στο long experiment), 15–23 GB στις μεγάλες·
+Traj-LO > 46 GB στο long experiment· δική μας ~30 Hz, λίγα GB.
+
+#### Συμπέρασμα ⏳
+1. **Δεν είμαστε οι ακριβέστεροι:** Traj-LO (συνεχούς χρόνου, μόνο LiDAR) και οι LIO έχουν ~2× μικρότερο RTE / APE και ~3× μικρότερο RPE.
+   Ισάξιοι με GenZ-ICP και CT-ICP, σαφώς καλύτεροι από MAD-ICP και KISS-SLAM.
+2. **Είμαστε οι μόνοι χωρίς αποτυχία** σε 27 ακολουθίες / 5 datasets / 4 αισθητήρες, και τρέχουμε σε όλες. Κάθε ακριβέστερη μέθοδος που καλύπτει
+   όλα τα datasets αποτυγχάνει τουλάχιστον μία φορά ή δεν τρέχει.
+3. **Το intensity σώζει τη σκάλα** (stairs): FAST-LIO2 733 / 97 m, COIN-LIO 0.22 m — η αρχική ιδέα του έργου, σε άλλη μέθοδο.
+4. **Πρόταση πλαισίου για το paper** (απόφαση Μ.Τ. / Λ.Γ.): ανθεκτικότητα και απλότητα, όχι καλύτερη ακρίβεια (`summary_for_LG_2026-10-01.md` §4–5).
+
+---
+
 ### 2026-09-30 — #082 Η κίνηση της εικόνας μόνο ως αρχή του ICP, χωρίς deskew: το 2 × 2 (deskew × αρχή) σε 27 × 4 — η αρχή για την ανθεκτικότητα και τη στροφή, το deskew για τη μετατόπιση
 
 **Σχετικά:** [#081](#2026-09-30--081-ablation-της-μεθόδου-του-paper-δύο-αρχές--εφεδρεία-η-αρχή-του-icp-από-την-εικόνα-μετρά-περισσότερο-φίλτρο-δαπέδου-μικρό-αλλά-σταθερό-σταθερό-σ-ισοπαλία-κατά-μέσο-όρο),

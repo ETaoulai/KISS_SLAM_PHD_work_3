@@ -21,7 +21,7 @@ METRICS = [("rpe_t", "RPE 1 s translation"), ("rpe_r", "RPE 1 s rotation"), ("at
            ("excess", "path length vs GT (|%|)"), ("z_rmse", "z RMSE"), ("kitti", "KITTI")]
 # A results_table.py csv of the official protocol (rpe1s_* present): RPE over 1 m and over 1 s, APE of evo, no KITTI.
 METRICS_OFFICIAL = [("rpe_t", "RPE 1 m translation"), ("rpe_r", "RPE 1 m rotation"), ("rpe1s_t", "RPE 1 s translation"),
-                    ("rpe1s_r", "RPE 1 s rotation"), ("ate", "APE (evo)"), ("excess", "path length vs GT (|%|)"),
+                    ("rpe1s_r", "RPE 1 s rotation"), ("rte", "RTE 100-800 m (KITTI)"), ("rre", "RRE 100-800 m (KITTI)"), ("ate", "APE (evo)"), ("excess", "path length vs GT (|%|)"),
                     ("z_rmse", "z RMSE")]
 
 

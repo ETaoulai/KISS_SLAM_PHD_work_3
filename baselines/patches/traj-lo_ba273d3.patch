@@ -1,0 +1,146 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 794eafb..b3a2518 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -60,4 +60,23 @@ target_link_libraries(trajlo PUBLIC
+         imgui glm::glm
+         PRIVATE tsl::robin_map
+         TBB::tbb
+-)
+\ No newline at end of file
++)
++# KISS comparison (#083): headless runner
++add_executable(trajlo_headless run_trajlo_headless.cpp
++        src/io/data_loader.cpp
++        src/utils/config.cpp
++        src/gui/visualizer.cpp
++        src/gui/glad.c
++        src/core/odometry.cpp
++        src/core/map_manager.cpp
++)
++target_link_libraries(trajlo_headless PUBLIC
++        yaml-cpp::yaml-cpp
++        Eigen3::Eigen
++        ${TBB_LIBRARIES}
++        rosbag
++        pthread
++        imgui glm::glm
++        PRIVATE tsl::robin_map
++        TBB::tbb
++)
+diff --git a/include/trajlo/io/rosbag_hesai.h b/include/trajlo/io/rosbag_hesai.h
+index 58ac0af..4fa8d7f 100644
+--- a/include/trajlo/io/rosbag_hesai.h
++++ b/include/trajlo/io/rosbag_hesai.h
+@@ -50,10 +50,23 @@ class RosbagHesai : public DataLoader {
+     if (!fs::exists(path))
+       std::cerr << "No dataset found in " << path << std::endl;
+ 
+-    bag.reset(new rosbag::Bag);
+-    bag->open(path, rosbag::bagmode::Read);
+-
+-    rosbag::View view(*bag);
++    // KISS comparison (#083): a folder of bags is ONE split sequence, read in time order (View merges by time).
++    std::vector<std::string> paths;
++    if (fs::is_directory(path)) {
++      for (const auto &e : fs::directory_iterator(path))
++        if (e.path().extension() == ".bag") paths.push_back(e.path().string());
++      std::sort(paths.begin(), paths.end());
++    } else {
++      paths.push_back(path);
++    }
++    std::vector<std::shared_ptr<rosbag::Bag>> bags;
++    rosbag::View view;
++    for (const auto &bp : paths) {
++      bags.emplace_back(new rosbag::Bag);
++      bags.back()->open(bp, rosbag::bagmode::Read);
++      view.addQuery(*bags.back());
++      std::cout << "bag " << bp << std::endl;
++    }
+ 
+ 
+     std::cout << "Hesai LiDAR CustomMsg topic " << point_topic << std::endl;
+diff --git a/include/trajlo/io/rosbag_ouster.h b/include/trajlo/io/rosbag_ouster.h
+index b2283b6..61644c4 100644
+--- a/include/trajlo/io/rosbag_ouster.h
++++ b/include/trajlo/io/rosbag_ouster.h
+@@ -50,10 +50,23 @@ class RosbagOuster : public DataLoader {
+     if (!fs::exists(path))
+       std::cerr << "No dataset found in " << path << std::endl;
+ 
+-    bag.reset(new rosbag::Bag);
+-    bag->open(path, rosbag::bagmode::Read);
+-
+-    rosbag::View view(*bag);
++    // KISS comparison (#083): a folder of bags is ONE split sequence, read in time order (View merges by time).
++    std::vector<std::string> paths;
++    if (fs::is_directory(path)) {
++      for (const auto &e : fs::directory_iterator(path))
++        if (e.path().extension() == ".bag") paths.push_back(e.path().string());
++      std::sort(paths.begin(), paths.end());
++    } else {
++      paths.push_back(path);
++    }
++    std::vector<std::shared_ptr<rosbag::Bag>> bags;
++    rosbag::View view;
++    for (const auto &bp : paths) {
++      bags.emplace_back(new rosbag::Bag);
++      bags.back()->open(bp, rosbag::bagmode::Read);
++      view.addQuery(*bags.back());
++      std::cout << "bag " << bp << std::endl;
++    }
+     // get topics
+     //            std::vector<const rosbag::ConnectionInfo *> connection_infos =
+     //                    view.getConnections();
+@@ -72,7 +85,9 @@ class RosbagOuster : public DataLoader {
+         sensor_msgs::PointCloud2Ptr pc_msg =
+             m.instantiate<sensor_msgs::PointCloud2>();
+ 
+-        scan->timestamp = pc_msg->header.stamp.toNSec() - 1e8;
++        // KISS comparison (#083): the header stamp is the START of the sweep in our data, as in our reader
++        // (point time = header + t); upstream assumed the end (header - 0.1 s + t).
++        scan->timestamp = pc_msg->header.stamp.toNSec();
+         int num = pc_msg->height * pc_msg->width;
+ 
+         int x_idx = getPointCloud2FieldIndex(*pc_msg, "x");
+@@ -89,7 +104,7 @@ class RosbagOuster : public DataLoader {
+ 
+         int step = pc_msg->point_step;
+ 
+-        double tbase = pc_msg->header.stamp.toSec() - 0.1;
++        double tbase = pc_msg->header.stamp.toSec();
+         for (size_t j = 0; j < num; ++j) {
+           float x = sensor_msgs::readPointCloud2BufferValue<float>(
+               &pc_msg->data[j * step + x_offset],
+diff --git a/run_trajlo_headless.cpp b/run_trajlo_headless.cpp
+new file mode 100644
+index 0000000..13b525a
+--- /dev/null
++++ b/run_trajlo_headless.cpp
+@@ -0,0 +1,26 @@
++// KISS comparison (#083): Traj-LO without the GUI - the same odometry, fed straight from the data loader.
++#include <trajlo/core/odometry.h>
++#include <trajlo/io/data_loader.h>
++#include <trajlo/utils/config.h>
++
++#include <iostream>
++#include <thread>
++
++int main(int argc, char *argv[]) {
++  if (argc < 2) {
++    std::cerr << "Usage: " << argv[0] << " <config_path>" << std::endl;
++    return 1;
++  }
++  traj::TrajConfig config;
++  config.load(argv[1]);
++  {
++    traj::TrajLOdometry::Ptr odometry(new traj::TrajLOdometry(config));
++    traj::DataLoader::Ptr loader = traj::DatasetFactory::GetDatasetIo(config.type);
++    odometry->Start();
++    loader->laser_queue = &odometry->laser_data_queue;
++    loader->start();
++    std::thread t_io(&traj::DataLoader::publish, loader, config.dataset_path, config.topic);
++    t_io.join();
++  }  // ~TrajLOdometry joins the processing thread, which writes the poses at the end of the data
++  return 0;
++}

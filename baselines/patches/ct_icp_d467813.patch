@@ -1,0 +1,101 @@
+diff --git a/command/CMakeLists.txt b/command/CMakeLists.txt
+index d04b953..f125d83 100644
+--- a/command/CMakeLists.txt
++++ b/command/CMakeLists.txt
+@@ -7,4 +7,8 @@ if (WITH_VIZ3D)
+     target_link_libraries(run_odometry PUBLIC CT_ICP-viz3d)
+ endif ()
+ 
+-install(TARGETS run_odometry DESTINATION ${CT_ICP_INSTALL_DIR}/bin)
+\ No newline at end of file
++install(TARGETS run_odometry DESTINATION ${CT_ICP_INSTALL_DIR}/bin)
++# KISS comparison (#083): CT-ICP fed from standard input
++add_executable(stream_odometry cmd_stream_odometry.cpp)
++target_link_libraries(stream_odometry PUBLIC CT_ICP SlamCore)
++install(TARGETS stream_odometry DESTINATION ${CMAKE_INSTALL_PREFIX}/bin)
+diff --git a/command/cmd_stream_odometry.cpp b/command/cmd_stream_odometry.cpp
+new file mode 100644
+index 0000000..69f3f73
+--- /dev/null
++++ b/command/cmd_stream_odometry.cpp
+@@ -0,0 +1,66 @@
++// KISS comparison (#083): CT-ICP fed scan by scan from standard input, so every method reads the same scans through the
++// same (Python) readers, with no PLY copy of the data on disk.
++//
++//   <python reader> | stream_odometry <out poses_tum.txt> [<num threads>] [robust_low_inertia|driving|robust_driving]
++//
++// Stream, per scan (little endian): int64 n, then n x 4 float64 (x, y, z, absolute point time in s).  n < 0 or EOF ends it.
++// Profile: OdometryOptions::DefaultRobustOutdoorLowInertia() - "sensor with high frequency acceleration changes", the
++// NCLT (Segway) profile of the authors, the closest of the shipped profiles to a hand-held sensor.  Continuous-time
++// motion compensation (begin and end pose per scan).
++// Output: one line per scan, the END pose of the scan at its own instant (the last point's time), TUM format.
++#include <ct_icp/odometry.h>
++
++#include <cstdint>
++#include <cstdio>
++#include <fstream>
++#include <iomanip>
++#include <iostream>
++#include <vector>
++
++int main(int argc, char **argv) {
++    if (argc < 2) {
++        std::cerr << "Usage: " << argv[0] << " <out poses_tum.txt> [num threads]" << std::endl;
++        return 1;
++    }
++    const std::string profile = argc > 3 ? argv[3] : "robust_low_inertia";
++    auto options = profile == "driving" ? ct_icp::OdometryOptions::DefaultDrivingProfile() :
++                   profile == "robust_driving" ? ct_icp::OdometryOptions::RobustDrivingProfile() :
++                   ct_icp::OdometryOptions::DefaultRobustOutdoorLowInertia();
++    std::cerr << "CT-ICP| profile " << profile << std::endl;
++    options.ct_icp_options.ls_num_threads = argc > 2 ? std::atoi(argv[2]) : 4;
++    options.debug_print = false;
++    options.ct_icp_options.debug_print = false;
++    ct_icp::Odometry odometry(options);
++
++    std::ofstream out(argv[1]);
++    out << std::fixed << std::setprecision(9);
++    std::vector<double> buf;
++    std::vector<slam::WPoint3D> frame;
++    int64_t n = 0;
++    size_t scan = 0, failed = 0;
++    while (std::fread(&n, sizeof(n), 1, stdin) == 1 && n >= 0) {
++        buf.resize(4 * n);
++        if (std::fread(buf.data(), sizeof(double), 4 * n, stdin) != size_t(4 * n)) break;
++        frame.resize(n);
++        for (int64_t i = 0; i < n; ++i) {
++            frame[i].raw_point.point = Eigen::Vector3d(buf[4 * i], buf[4 * i + 1], buf[4 * i + 2]);
++            frame[i].raw_point.timestamp = buf[4 * i + 3];
++            frame[i].world_point = frame[i].raw_point.point;
++            frame[i].index_frame = slam::frame_id_t(scan);
++        }
++        // As the dataset loader does (dataset.cpp): wrap, register the schema's fields (the timestamps), then register.
++        // (The std::vector overload of RegisterFrame skips RegisterFieldsFromSchema and fails its timestamp check.)
++        auto pc = slam::PointCloud::WrapVector(frame, slam::WPoint3D::DefaultSchema(), "raw_point");
++        pc.RegisterFieldsFromSchema();
++        auto summary = odometry.RegisterFrame(pc, slam::frame_id_t(scan));
++        if (!summary.success) ++failed;
++        const auto &end = summary.frame.end_pose;
++        const Eigen::Quaterniond q = end.pose.quat;
++        const Eigen::Vector3d t = end.pose.tr;
++        out << end.dest_timestamp << " " << t.x() << " " << t.y() << " " << t.z() << " "
++            << q.x() << " " << q.y() << " " << q.z() << " " << q.w() << "\n";
++        if (++scan % 500 == 0) std::cerr << "CT-ICP| scan " << scan << " (failed " << failed << ")" << std::endl;
++    }
++    std::cerr << "CT-ICP| " << scan << " scans, " << failed << " registrations flagged as failed" << std::endl;
++    return 0;
++}
+diff --git a/src/SlamCore/utils.cxx b/src/SlamCore/utils.cxx
+index 293414b..5701584 100644
+--- a/src/SlamCore/utils.cxx
++++ b/src/SlamCore/utils.cxx
+@@ -115,7 +115,8 @@ void _posix_signal_handler(int sig, siginfo_t *siginfo, void *context) {
+     _Exit(1);
+ }
+ 
+-static uint8_t alternate_stack[SIGSTKSZ];
++// KISS comparison (#083): SIGSTKSZ is not a constant since glibc 2.34; the backtrace handler's stack only
++static uint8_t alternate_stack[65536];
+ 
+ void _setup_signal_handler() {
+     {
