@@ -1,0 +1,23 @@
+diff -ruN -x .git ../DLO/cfg/dlo.yaml DLO/cfg/dlo.yaml
+--- ../DLO/cfg/dlo.yaml	2026-10-01 19:53:08.225512831 +0300
++++ DLO/cfg/dlo.yaml	2026-10-01 19:53:28.642348346 +0300
+@@ -13,7 +13,7 @@
+ 
+   adaptiveParams: true
+ 
+-  imu: true
++  imu: false                     # #085: LiDAR-only comparison (authors: IMU optional)
+   gravityAlign: true
+ 
+   odomNode:
+diff -ruN -x .git ../DLO/launch/dlo.launch DLO/launch/dlo.launch
+--- ../DLO/launch/dlo.launch	2026-10-01 19:53:08.364889499 +0300
++++ DLO/launch/dlo.launch	2026-10-01 19:53:28.641369855 +0300
+@@ -49,6 +49,6 @@
+   </node>
+ 
+   <!-- RViz -->
+-  <node pkg="rviz" type="rviz" name="dlo_rviz" args="-d $(find direct_lidar_odometry)/launch/dlo.rviz"/>
++  <node if="$(arg rviz)" pkg="rviz" type="rviz" name="dlo_rviz" args="-d $(find direct_lidar_odometry)/launch/dlo.rviz"/>
+ 
+ </launch>

@@ -116,6 +116,7 @@ class SlamPipeline(OdometryPipeline):
                      f"{f', stuck {img.stuck_min:g}' if img.stuck_min is not None else ''}"
                      f"{' floor-only' if img.stuck_min is not None and img.stuck_floor_only else ''}"
                      f"{', NO deskew' if not img.use_for_deskew else ''}"
+                     f"{', deskew rotation CV' if img.deskew_rotation == 'cv' else ''}{', 2nd deskew pass' if img.redeskew else ''}"
                      f"{', + ICP initial guess' if img.use_as_initial_guess else ''}"
                      f", sigma {'fixed ' + format(img.fixed_sigma, 'g') if img.fixed_sigma is not None else 'adaptive'}"
                      f", motion {'online, ' + img.detector.upper() + (', parallel' if img.parallel else '') if img.motion_file is None else img.motion_file})"
@@ -196,6 +197,7 @@ class SlamPipeline(OdometryPipeline):
         self._write_closures()
         self._write_local_maps()
         self._write_deskewed_frames()
+        self._write_image_motions()
         self._write_two_start_log()
         self._write_icp_metrics()
         self._plot_icp_residuals()
@@ -505,6 +507,16 @@ class SlamPipeline(OdometryPipeline):
             w = csv.DictWriter(f, fieldnames=keys)
             w.writeheader()
             w.writerows(log)
+
+    def _write_image_motions(self):
+        """The image motion of every scan as the estimator gave it, with its inliers (#086): image_motions.npz,
+        motion (N,4,4) NaN where it failed, inliers (N,), scan (N,).  Recording only."""
+        log = getattr(self.kiss_slam, "image_motion_log", [])
+        if not log:
+            return
+        motion = np.stack([np.full((4, 4), np.nan) if np.isscalar(m) else m for _, m, _ in log])
+        np.savez(os.path.join(self.results_dir, "image_motions.npz"), motion=motion,
+                 inliers=np.array([n for *_, n in log]), scan=np.array([k for k, *_ in log]))
 
     def _write_deskewed_frames(self):
         """diagnostics.save_deskewed_voxel: every scan as deskewed (sensor frame, voxel-downsampled), with

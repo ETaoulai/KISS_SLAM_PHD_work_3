@@ -364,6 +364,7 @@ class KissSLAM:
         self.sweep_spans = []               # last - first point time of each scan, in the reader's own unit
         self._kept_deskew_delta = None      # deskew motion of the result kept by _register_frame_image_motion
         self._image_motions = None         # precomputed (N,4,4), NaN where failed
+        self.image_motion_log = []         # (scan, motion or NaN, inliers) per scan, written by the pipeline (#086)
         # Index in the sequence of the first scan fed to process_scan: the precomputed
         # file has one row per scan of the whole sequence.  SlamPipeline sets it to its
         # first scan (--jump); without it a run with jump > 0 read the wrong rows.
@@ -724,7 +725,9 @@ class KissSLAM:
                     self.submit_image_motion(frame, timestamps, intensity, ring)
                 M = self._motion_futures.popleft().result()
             else:
-                M, _ = self._image_motion_est.motion(frame, timestamps, intensity, ring)
+                M, n_inl = self._image_motion_est.motion(frame, timestamps, intensity, ring)
+                # Diagnostic record (#086): the image motion of every scan as estimated, and its RANSAC inliers.
+                self.image_motion_log.append((self._frame_counter, np.nan if M is None else np.asarray(M, float), n_inl))
         if M is None:                         # failed, or rejected by the plausibility gate (#054)
             self.n_image_motion_failures += 1
             return None
@@ -793,7 +796,16 @@ class KissSLAM:
             start = odo.last_delta if self.image_cfg.fallback == "constant_velocity" else delta
         else:
             delta = M if self.image_cfg.use_for_deskew else np.eye(4)      # False: ICP start only, no deskew (#082)
+            if self.image_cfg.use_for_deskew and self.image_cfg.deskew_rotation == "cv":   # hybrid deskew (#086)
+                delta = M.copy()
+                delta[:3, :3] = odo.last_delta[:3, :3]
             start = M if self.image_cfg.use_as_initial_guess else odo.last_delta
+        if self.image_cfg.deskew_motion_file is not None:   # oracle deskew (#086): the ground-truth motion, deskew only
+            if not hasattr(self, "_oracle_deskew"):
+                self._oracle_deskew = np.load(self.image_cfg.deskew_motion_file)["motion"]
+            D = self._oracle_deskew[self.first_scan_index + self._frame_counter]
+            if np.isfinite(D).all():
+                delta = D
         fixed_sigma = self.image_cfg.fixed_sigma
         sigma = odo.adaptive_threshold.get_threshold() if fixed_sigma is None else float(fixed_sigma)
 
@@ -853,6 +865,10 @@ class KissSLAM:
                         row.update({f"{k}_t{a}": v for a, v in zip("xyz", mk[:3, 3])})
                     self.two_start_log.append(row)
             self.two_start_seconds += time.perf_counter() - t0
+        if self.image_cfg.redeskew and M is not None:      # second pass (#086): deskew with the ICP's motion, register again
+            motion = np.linalg.inv(odo.last_pose) @ new_pose
+            deskewed, source, frame_downsample, _, new_pose = register(motion, motion)
+            kept_delta = motion
         if fixed_sigma is None:
             odo.adaptive_threshold.update_model_deviation(np.linalg.inv(initial_guess) @ new_pose)
         # else: sigma stays at fixed_sigma; the adaptive threshold is never updated

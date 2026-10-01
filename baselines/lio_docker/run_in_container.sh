@@ -8,9 +8,10 @@ mkdir -p "$out"
 roscore > "$out/roscore.log" 2>&1 & sleep 4
 rosparam set use_sim_time true
 if [ "$method" = coin ]; then roslaunch coin_lio "${args[@]}" rviz:=false > "$out/method.log" 2>&1 &
+elif [ "$method" = dlo ]; then roslaunch direct_lidar_odometry "${args[@]}" rviz:=false > "$out/method.log" 2>&1 &
 else roslaunch "${args[@]}" > "$out/method.log" 2>&1 & fi
 sleep 8
-rosbag record -O "$out/odometry.bag" /Odometry > "$out/record.log" 2>&1 &
+rosbag record -O "$out/odometry.bag" ${ODOM_TOPIC:-/Odometry} > "$out/record.log" 2>&1 &
 sleep 2
 rosbag play --clock --quiet --queue=1000 "${bags[@]}" > "$out/play.log" 2>&1
 echo "play exit $?" >> "$out/play.log"

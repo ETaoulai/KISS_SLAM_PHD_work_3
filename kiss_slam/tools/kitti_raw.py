@@ -16,6 +16,9 @@ The sync scans (= KITTI odometry; odometry sequence 07 = drive 2011_09_30_0027, 
 the SAME raw sweeps, point for point (checked on drive 0027: identical clouds, 0.0 mm; extract only adds a few frames at the
 ends and stores text).  Neither is motion compensated: KISS's own deskew improves both alike (#084).
 Ground truth: scripts/kitti_gt.py (odometry poses in the Velodyne frame).
+- correct=True (#085): the vertical-angle correction of the KITTI Velodyne intrinsics that IMLS-SLAM, CT-ICP and KISS-ICP apply
+  (each point turned upwards about the horizontal axis perpendicular to it, 0.205 deg in kiss_icp's _correct_kitti_scan, the
+  same call as kiss_icp's KITTI loaders).  Azimuth, hence ring and time, unchanged.
 """
 from datetime import datetime
 from pathlib import Path
@@ -40,8 +43,9 @@ def rings(xyz):
 
 
 class KittiRaw:
-    def __init__(self, data_dir, first=0, last=None):
+    def __init__(self, data_dir, first=0, last=None, correct=False):
         self.data_dir = Path(data_dir)
+        self.correct = correct
         self.sequence_id = self.data_dir.name
         v = self.data_dir / "velodyne_points"
         files = sorted((v / "data").glob("*.bin")) or sorted((v / "data").glob("*.txt"))
@@ -64,5 +68,8 @@ class KittiRaw:
         ring = rings(xyz)
         frac = np.clip(0.5 * (1.0 - np.arctan2(xyz[:, 1], xyz[:, 0]) / np.pi), 0.0, 1.0)   # (180 - yaw) / 360
         t = self.start[idx] + frac * (self.end[idx] - self.start[idx])
+        if self.correct:
+            from kiss_icp.pybind import kiss_icp_pybind
+            xyz = np.asarray(kiss_icp_pybind._correct_kitti_scan(kiss_icp_pybind._Vector3dVector(xyz)))
         keep = np.linalg.norm(xyz, axis=1) > 0.0
         return xyz[keep], t[keep], refl[keep], ring[keep]

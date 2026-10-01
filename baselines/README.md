@@ -11,6 +11,7 @@ go to `~/kiss_runs_ssd/<sequence>/<arm>_s0` and are scored by `scripts/results_t
 | Traj-LO | github kevin2431/Traj-LO `ba273d3` | `run_baseline.py trajlo`, its own bag reader | `patches/traj-lo_ba273d3.patch`: headless runner; a folder of bags = one sequence; Ouster point time = header + t (as our reader; upstream header - 0.1 s + t) |
 | CT-ICP | github jedeschaud/ct_icp `d467813` (superbuild, `CXXFLAGS=-include cstdint`) | `run_baseline.py cticp`, our readers streamed through a pipe | `patches/ct_icp_d467813.patch`: `stream_odometry` runner (profile robust_low_inertia / driving); SIGSTKSZ fix for glibc >= 2.34 |
 | FAST-LIO2 | github hku-mars/FAST_LIO `7cc4175` | `lio_docker`, ROS Noetic, bags at real time | `patches/fast_lio_7cc4175.patch`: Hesai reader (`lidar_type: 5`, through the Velodyne path) |
+| DLO | github vectr-ucla/direct_lidar_odometry `11528c0` | `lio_docker` (image `kiss-lio:3`), bags at real time, `scripts/lio_to_tum.py --raw-scan` | `patches/dlo_11528c0.patch`: `imu: false` (LiDAR only, #085); RViz optional |
 | COIN-LIO | github ethz-asl/COIN-LIO `76729cc` | `lio_docker`, its `mapping_newer_college.launch` | none (Ouster only: NCD 2021) |
 
 `lio_docker/`: `Dockerfile` (image `kiss-lio:2`: `ros:noetic-perception` + Livox SDK / livox_ros_driver (HEAD, message types only) +

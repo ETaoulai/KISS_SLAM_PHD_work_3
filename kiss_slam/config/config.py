@@ -157,6 +157,14 @@ class ImageDeskewConfig(BaseModel):
     # Use the image motion to deskew the scan (#082).  False = the scan is not deskewed and the image motion is only the ICP
     # initial guess (with use_as_initial_guess); the counterpart of use_as_initial_guess = False (deskew only, #081).
     use_for_deskew: bool = True
+    # Rotation gap (#086, the image rotation's per-scan noise passes through the deskew, #068 / #082): deskew_rotation "cv" =
+    # deskew with the image TRANSLATION and KISS's constant-velocity rotation (the ICP start stays the image motion);
+    # redeskew = after the ICP, deskew the scan again with the ICP's own motion and register once more (second pass).
+    deskew_rotation: Literal["image", "cv"] = "image"
+    redeskew: bool = False
+    # Diagnostic only (#086, uses the ground truth): an .npz with "motion" (N,4,4) per scan (NaN = keep the method's) that
+    # REPLACES the deskew motion only - ICP start, two starts, map unchanged.  scripts/make_oracle_motion.py writes it.
+    deskew_motion_file: Optional[str] = None
     # Adaptive threshold: fixed at this value (m) for the whole run (#031).
     # None = KISS adaptive (updated from the ICP correction of the initial guess).
     fixed_sigma: Optional[float] = 2.0

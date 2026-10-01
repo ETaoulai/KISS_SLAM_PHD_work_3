@@ -120,7 +120,15 @@ ARMS = {"kissncd": "KISS-SLAM, kiss_icp NCD loader", "kissnodeskew": "KISS-SLAM,
         "cticp": "CT-ICP (continuous-time odometry, robust low-inertia profile, #083)",
         "cticpdriving": "CT-ICP (continuous-time odometry, driving profile, #083)",
         "coinlio": "COIN-LIO (LiDAR-inertial, intensity + IMU, reference, #083)",
-        "fastlio": "FAST-LIO2 (LiDAR-inertial, reference, #083)"}
+        "fastlio": "FAST-LIO2 (LiDAR-inertial, reference, #083)",
+        "fastlioblind1": "FAST-LIO2 blind 1 m (LiDAR-inertial, reference, stairs only, #083)",
+        "dlo": "DLO (LiDAR-only odometry, authors' config with imu false, #085)",
+        "rotmodelcv": "i3 + SURF, two starts + range fallback, motion model cv (rotation #086)",
+        "rotdeskewcv": "i3 + SURF, two starts + range fallback, deskew rotation from constant velocity (rotation #086)",
+        "rotredeskew": "i3 + SURF, two starts + range fallback, second deskew pass with ICP motion (rotation #086)",
+        "rotsmooth3": "i3 + SURF, two starts + range fallback, image rotation smoothed over 3 scans (rotation #086)",
+        "oracledeskew": "i3 + SURF, two starts + range fallback, DESKEW FROM GROUND TRUTH (diagnostic, #086)",
+        "upright": "i3 + upright SURF, two starts + range fallback (#086)"}
 # The arms compared from 25/9 on (decision M.T.): no indoor_detail, no ablations (rotation smoothed, translation only, ...).
 MAIN_ARMS = ["kiss", "kissnodeskew", "sift", "surf", "surftwo", "surftwom2", "surftwom4"]
 if "--all-arms" not in sys.argv:

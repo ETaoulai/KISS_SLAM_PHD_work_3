@@ -8,6 +8,7 @@
                               [--rotation-weight=100] [--save-failed]
                               [--normalise=gain|gain_clahe] [--panorama-width=2048] [--image-start=false]
                               [--stuck=none|<m>] [--sigma=adaptive|<m>] [--deskew=false]
+                              [--model=cv|car|ca] [--deskew-rotation=cv] [--redeskew] [--surf-upright]
 
 sequence: a 2020 sequence dir with raw_format/ouster_scan/*.pcd (kiss_slam/tools/ncd_pcd.py), or a
           .bag file, or a folder whose *.bag are ONE split sequence (read in time order; 2021 bags), or a KITTI raw
@@ -54,9 +55,13 @@ def main():
     if is_bag:
         from kiss_icp.datasets.rosbag import RosbagDataset
         dataset = RosbagDataset(seq, opts.get("topic", "/os_cloud_node/points"))
+    elif (seq / "lidar").is_dir() and (seq / "applanix").is_dir():   # Boreas sequence (#085)
+        from kiss_slam.tools.boreas import Boreas
+        dataset = Boreas(seq, int(opts.get("first", 0)), int(opts["last"]) if "last" in opts else None)
     elif (seq / "velodyne_points").is_dir():                # KITTI raw drive, sync or extract (#084)
         from kiss_slam.tools.kitti_raw import KittiRaw
-        dataset = KittiRaw(seq, int(opts.get("first", 0)), int(opts["last"]) if "last" in opts else None)
+        dataset = KittiRaw(seq, int(opts.get("first", 0)), int(opts["last"]) if "last" in opts else None,
+                           correct="--kitti-correction" in sys.argv)   # vertical-angle correction (#085)
     else:
         from kiss_slam.tools.ncd_pcd import NewerCollege2020Pcd
         dataset = NewerCollege2020Pcd(seq)
@@ -105,6 +110,16 @@ def main():
             config.image_deskew.fixed_sigma = None if v.lower() == "adaptive" else float(v)
         if "deskew" in opts:                                     # false: image motion only as ICP start, no deskew (#082)
             config.image_deskew.use_for_deskew = opts["deskew"].lower() not in ("false", "0", "no", "off")
+        if "deskew-rotation" in opts:                            # image | cv: hybrid deskew (#086)
+            config.image_deskew.deskew_rotation = opts["deskew-rotation"]
+        if "--redeskew" in sys.argv:                             # second deskew pass with the ICP's motion (#086)
+            config.image_deskew.redeskew = True
+        if "--surf-upright" in sys.argv:                         # upright SURF: no keypoint orientation (#086)
+            config.image_deskew.surf_upright = True
+        if "oracle-deskew" in opts:                              # diagnostic: deskew from ground-truth motion (#086)
+            config.image_deskew.deskew_motion_file = opts["oracle-deskew"]
+        if "model" in opts:                                      # image motion model: cv | car | ca (#021, #086)
+            config.image_deskew.model = opts["model"]
         if "save-frames" in opts:
             config.diagnostics.save_deskewed_voxel = float(opts["save-frames"])
             config.diagnostics.save_deskewed_fraction = float(opts.get("save-fraction", 1.0))
