@@ -39,6 +39,11 @@ BEARING_MIN_PAIRS = 20
 GUIDED_WINDOW = None
 GUIDED_ROWS = 4
 GUIDED_K = 16
+GUIDED_SHIFT = 0.0                     # #088: centre of the window, columns - the median column shift of the previous scan's matches
+GUIDED_WINDOW_SAVED = None
+GUIDED_MIN_MATCHES = 30
+GUIDED_MAX_SHIFT = 20.0               # #088: previous shift above this many columns (~7 deg / scan) -> brute force (fast rotation)                # #088: fewer guided matches than this -> brute force for this scan (safety net, fast rotation)
+ORB_FEATURES = 5000                    # #088: ORB keypoints per panorama (OpenCV default 500 - too few here)
 # RANSAC stops once the best consensus so far makes a better one unlikely: after
 # log(1 - RANSAC_CONF) / log(1 - w^3) hypotheses, w = best inlier fraction (≈ 50 at w = 0.5 instead of
 # 400), never more than RANSAC_IT; hypotheses are drawn and scored RANSAC_BATCH at a time in numpy.
@@ -442,7 +447,9 @@ def make_detector(detector="sift", surf_hessian=100.0, surf_upright=False):
                 'CMAKE_ARGS="-DOPENCV_ENABLE_NONFREE=ON" pip install --no-binary opencv-contrib-python-headless '
                 "opencv-contrib-python-headless  (after uninstalling opencv-python)"
             ) from e
-    raise ValueError(f"unknown detector {detector!r}: 'sift' or 'surf'")
+    if detector == "orb":                                  # #088: binary descriptors, Hamming matching; many keypoints, small border / patch
+        return cv2.ORB_create(nfeatures=ORB_FEATURES, scaleFactor=1.2, nlevels=8, edgeThreshold=15, patchSize=15, fastThreshold=10)
+    raise ValueError(f"unknown detector {detector!r}: 'sift', 'surf' or 'orb'")
 
 
 def features(xyz, ts, inten, ring, detector, normalisation="none", _clahe=[]):
@@ -487,7 +494,7 @@ except ImportError:
     _guided_cpp = None
 
 
-def guided_matches(kp1, d1, kp2, d2):
+def guided_matches(kp1, d1, kp2, d2, shift=0.0, window=None):
     """Matches of kp1 among the kp2 within GUIDED_WINDOW columns / GUIDED_ROWS rings of the same pixel (#087), as cv2.DMatch.
 
     Consecutive scans are 0.1 s apart: a feature moves a few pixels (fast rotation ~30), so a look-alike elsewhere in the panorama
@@ -496,9 +503,11 @@ def guided_matches(kp1, d1, kp2, d2):
     if len(kp1) < 2 or len(kp2) < 2:
         return []
     a = np.array([k.pt for k in kp1]); b = np.array([k.pt for k in kp2])
+    a = a.copy(); a[:, 0] = (a[:, 0] + shift) % W                  # #088: window centred on the predicted position
+    binary = d1.dtype == np.uint8                                 # ORB (#088): Hamming distance
     if _guided_cpp is not None:                                   # C++ (scripts/build_guided_match.sh): rectangular window, all candidates
-        j, best, second = _guided_cpp.guided_match(a.astype(np.float32), d1, b.astype(np.float32), d2, float(W), float(GUIDED_WINDOW),
-                                                   float(GUIDED_ROWS * UP))
+        f = _guided_cpp.guided_match_hamming if binary else _guided_cpp.guided_match
+        j, best, second = f(a.astype(np.float32), d1, b.astype(np.float32), d2, float(W), float(window or GUIDED_WINDOW), float(GUIDED_ROWS * UP))
         fin = np.isfinite(best)
         if not fin.any():
             return []
@@ -512,7 +521,10 @@ def guided_matches(kp1, d1, kp2, d2):
     dist, idx = np.atleast_2d(dist), np.atleast_2d(idx)
     valid = np.isfinite(dist)
     cand = np.where(valid, src[np.minimum(idx, len(bb) - 1)], 0)
-    dd = np.linalg.norm(d1[:, None, :].astype(np.float32) - d2[cand].astype(np.float32), axis=2)
+    if d1.dtype == np.uint8:                                      # ORB: Hamming
+        dd = np.unpackbits(d1[:, None, :] ^ d2[cand], axis=2).sum(axis=2).astype(np.float32)
+    else:
+        dd = np.linalg.norm(d1[:, None, :].astype(np.float32) - d2[cand].astype(np.float32), axis=2)
     dd[~valid] = np.inf
     order = np.argsort(dd, axis=1)
     best, second = np.take_along_axis(dd, order[:, :1], 1)[:, 0], np.take_along_axis(dd, order[:, 1:2], 1)[:, 0] if dd.shape[1] > 1 else np.full(len(dd), np.inf)
@@ -565,10 +577,17 @@ def match_motion(f1, f2, period, rng, bf, model="cv", subpixel=False,
     match_motion.last_good = []
     if d1 is None or d2 is None or len(kp1) < 2 or len(kp2) < 2:
         return None, None, 0
-    if GUIDED_WINDOW is not None:                         # #087
-        good = guided_matches(kp1, d1, kp2, d2)
-    else:
+    global GUIDED_SHIFT
+    good = None
+    if GUIDED_WINDOW is not None and abs(GUIDED_SHIFT) <= GUIDED_MAX_SHIFT:   # #087; #088: only when turning slowly, window at the previous shift
+        good = guided_matches(kp1, d1, kp2, d2, GUIDED_SHIFT, GUIDED_WINDOW + 0.5 * abs(GUIDED_SHIFT))   # wider when turning fast
+        if len(good) < GUIDED_MIN_MATCHES:
+            good = None
+    if good is None:
         good = [m for m, n in bf.knnMatch(d1, d2, k=2) if m.distance < RATIO * n.distance]
+    if GUIDED_WINDOW is not None and len(good) >= GUIDED_MIN_MATCHES:
+        dx = np.array([kp2[m.trainIdx].pt[0] - kp1[m.queryIdx].pt[0] for m in good])
+        GUIDED_SHIFT = float(np.median((dx + W / 2) % W - W / 2))      # wrapped column shift, for the next scan
     match_motion.last_good = good                      # for the images of rejected pairs (#054)
     if PIXEL_MASK is not None:
         def on_mask(kp):
@@ -686,12 +705,14 @@ class ScanMotionEstimator:
             global W
             W = int(panorama_width)
         global BEARING_MIN_RANGE, GUIDED_WINDOW               # #087: module-wide, as W
+        global GUIDED_SHIFT
         BEARING_MIN_RANGE, GUIDED_WINDOW = bearing_min_range, guided_window
+        GUIDED_SHIFT = 0.0
         self.intensity_scale = intensity_scale
         self.stuck_min, self.floor_only, self.elev, self.range_ = stuck_min, floor_only, elev, range_
         self.detector_name = detector
         self.detector = make_detector(detector, surf_hessian, surf_upright)
-        self.bf = cv2.BFMatcher(cv2.NORM_L2)
+        self.bf = cv2.BFMatcher(cv2.NORM_HAMMING if detector == "orb" else cv2.NORM_L2)   # #088: ORB is binary
         self.rng = np.random.default_rng(seed)
         self.prev = None
         self.ratios = []; self.last_factor = 1.0
@@ -723,6 +744,16 @@ class ScanMotionEstimator:
             return None, 0
         M0, M1, n = match_motion(prev, cur, self.period, self.rng, self.bf, self.model, self.subpixel,
                                  self.stuck_min, self.floor_only, self.elev, self.range_)
+        if M1 is None and GUIDED_WINDOW is not None:          # #088: guided matching failed (fast rotation) -> brute force for this scan
+            global GUIDED_WINDOW_SAVED
+            saved, GUIDED_WINDOW_SAVED = GUIDED_WINDOW, None
+            globals()["GUIDED_WINDOW"] = None
+            try:
+                M0, M1, n = match_motion(prev, cur, self.period, self.rng, self.bf, self.model, self.subpixel,
+                                         self.stuck_min, self.floor_only, self.elev, self.range_)
+            finally:
+                globals()["GUIDED_WINDOW"] = saved
+            self.n_guided_retries = getattr(self, "n_guided_retries", 0) + 1
         if TRANS_MODE == "auto" and TRANS_MIN_RANGE is not None:
             f = (np.clip(np.median(self.ratios[-TRANS_AUTO_WINDOW:]), *TRANS_CLIP)
                  if len(self.ratios) >= TRANS_AUTO_MIN else 1.0)      # causal: only the scans before this one

@@ -119,7 +119,7 @@ class SlamPipeline(OdometryPipeline):
                      f"{', deskew rotation CV' if img.deskew_rotation == 'cv' else ''}{', 2nd deskew pass' if img.redeskew else ''}"
                      f"{', + ICP initial guess' if img.use_as_initial_guess else ''}"
                      f", sigma {'fixed ' + format(img.fixed_sigma, 'g') if img.fixed_sigma is not None else 'adaptive'}"
-                     f", motion {'online, ' + img.detector.upper() + (', parallel' if img.parallel else '') if img.motion_file is None else img.motion_file})"
+                     f", motion {'online, ' + img.detector.upper() + (' upright' if img.detector == 'surf' and img.surf_upright else '') + (f', guided {img.guided_matching_window:g} px' if img.guided_matching_window else '') + (', parallel' if img.parallel else '') if img.motion_file is None else img.motion_file})"
                 if self.use_image_deskew
                 else "BASELINE (vanilla KISS-SLAM)"
             )

@@ -138,12 +138,13 @@ class ImageDeskewConfig(BaseModel):
     # SURF needs OpenCV built with contrib + OPENCV_ENABLE_NONFREE=ON (not in the pip wheels).
     # surf_hessian_threshold: higher = fewer, stronger keypoints (OpenCV default 100).
     # surf_upright: no keypoint orientation (U-SURF); the panorama is never rotated in-plane.
-    detector: Literal["sift", "surf"] = "sift"
+    detector: Literal["sift", "surf", "orb"] = "sift"   # "orb" since #088
     # Multiplies the raw intensity before the panorama, which clips at 255 (built for the Hesai
     # 0-255 scale).  1.0 = Hesai.  Ouster (0 to ~1100, median 150-450): 255/1024 = 0.249 (#041).
     intensity_scale: float = 1.0
     surf_hessian_threshold: float = 100.0
-    surf_upright: bool = False
+    # Default True since #088 (ΑΠΟΦΑΣΗ Μ.Τ. 2/10, branch rotation_bearing): -30 % time, +22-31 % inliers (#086).  False = every result before #088.
+    surf_upright: bool = True
     # Drop matches that are the same point in the sensor frame, |p - q| < stuck_min (m):
     # intensity patterns travelling with the sensor (#025-#026).  None = keep all.
     stuck_min: Optional[float] = 0.05
@@ -169,7 +170,8 @@ class ImageDeskewConfig(BaseModel):
     # rotation after the 3D fit (translation fixed); guided_matching_window = match only within this many panorama columns
     # (and 4 rings) of the same pixel instead of brute force over the whole panorama.  None = off (every result before #087).
     rotation_from_bearings: Optional[float] = None
-    guided_matching_window: Optional[float] = None
+    # Default 40 since #088 (ΑΠΟΦΑΣΗ Μ.Τ. 2/10): with upright SURF, rotation -3.5 %, RTE -2 %, real time (#087).  None = every result before #088.
+    guided_matching_window: Optional[float] = 40.0
     # Adaptive threshold: fixed at this value (m) for the whole run (#031).
     # None = KISS adaptive (updated from the ICP correction of the initial guess).
     fixed_sigma: Optional[float] = 2.0
