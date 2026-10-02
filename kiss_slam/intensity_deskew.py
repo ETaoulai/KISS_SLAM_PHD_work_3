@@ -41,6 +41,9 @@ GUIDED_ROWS = 4
 GUIDED_K = 16
 GUIDED_SHIFT = 0.0                     # #088: centre of the window, columns - the median column shift of the previous scan's matches
 GUIDED_WINDOW_SAVED = None
+GUIDED_PREDICTION = "shift"            # #089: window centre - "shift" (median column shift of the previous scan, #088) or "motion"
+                                       #   (each keypoint's 3D point moved by the previous scan's motion and projected; per keypoint)
+GUIDED_PRED_MOTION = None              # #089: the previous scan's motion (p = R q + t), set by the estimator before each match
 GUIDED_MIN_MATCHES = 30
 GUIDED_MAX_SHIFT = 20.0               # #088: previous shift above this many columns (~7 deg / scan) -> brute force (fast rotation)                # #088: fewer guided matches than this -> brute force for this scan (safety net, fast rotation)
 ORB_FEATURES = 5000                    # #088: ORB keypoints per panorama (OpenCV default 500 - too few here)
@@ -494,7 +497,29 @@ except ImportError:
     _guided_cpp = None
 
 
-def guided_matches(kp1, d1, kp2, d2, shift=0.0, window=None):
+def predict_pixels(f1, f2, M):
+    """Where the keypoints of panorama f1 should appear in panorama f2 if the motion between them is M (p = R q + t, p in f1's scan):
+    q = R^T (p - t), projected with the panorama's own mapping - column from azimuth, row from elevation interpolated over f2's per-ring
+    median elevations.  Returns (N, 2) pixel positions and a mask of the keypoints with a 3D point (#089)."""
+    P1, T1, v1, kp1 = f1[:4]
+    P2, v2 = f2[0], f2[2]
+    xy1 = np.array([k.pt for k in kp1]).reshape(-1, 2)
+    p, _, ok = lookup_batch(P1, T1, v1, xy1, False)
+    q = (p - M[:3, 3]) @ M[:3, :3]                                       # R^T (p - t), row-wise
+    col = (np.arctan2(q[:, 1], q[:, 0]) + np.pi) / (2 * np.pi) * W - 0.5  # pixel coordinates of the keypoint image (centre convention)
+    el2 = np.full(P2.shape[0], np.nan)
+    for r in range(P2.shape[0]):
+        if v2[r].any():
+            pr = P2[r][v2[r]]
+            el2[r] = np.median(np.arctan2(pr[:, 2], np.linalg.norm(pr[:, :2], axis=1)))
+    rows = np.flatnonzero(np.isfinite(el2))
+    el = np.arctan2(q[:, 2], np.linalg.norm(q[:, :2], axis=1))
+    rf = np.interp(-el, -el2[rows], rows.astype(float))                 # elevation decreases with the row
+    pred = np.column_stack([col % W, (rf + 0.5) * UP - 0.5])
+    return pred, ok & np.isfinite(pred).all(1)
+
+
+def guided_matches(kp1, d1, kp2, d2, shift=0.0, window=None, centres=None):
     """Matches of kp1 among the kp2 within GUIDED_WINDOW columns / GUIDED_ROWS rings of the same pixel (#087), as cv2.DMatch.
 
     Consecutive scans are 0.1 s apart: a feature moves a few pixels (fast rotation ~30), so a look-alike elsewhere in the panorama
@@ -504,6 +529,8 @@ def guided_matches(kp1, d1, kp2, d2, shift=0.0, window=None):
         return []
     a = np.array([k.pt for k in kp1]); b = np.array([k.pt for k in kp2])
     a = a.copy(); a[:, 0] = (a[:, 0] + shift) % W                  # #088: window centred on the predicted position
+    if centres is not None:                                          # #089: per-keypoint prediction where available
+        a[centres[1]] = centres[0][centres[1]]
     binary = d1.dtype == np.uint8                                 # ORB (#088): Hamming distance
     if _guided_cpp is not None:                                   # C++ (scripts/build_guided_match.sh): rectangular window, all candidates
         f = _guided_cpp.guided_match_hamming if binary else _guided_cpp.guided_match
@@ -575,11 +602,18 @@ def match_motion(f1, f2, period, rng, bf, model="cv", subpixel=False,
     match_motion.last_ratio = None
     P1, T1, v1, kp1, d1, _ = f1[:6]; P2, T2, v2, kp2, d2, t_start = f2[:6]
     match_motion.last_good = []
+    match_motion.last_pairs = None
     if d1 is None or d2 is None or len(kp1) < 2 or len(kp2) < 2:
         return None, None, 0
     global GUIDED_SHIFT
     good = None
-    if GUIDED_WINDOW is not None and abs(GUIDED_SHIFT) <= GUIDED_MAX_SHIFT:   # #087; #088: only when turning slowly, window at the previous shift
+    fast = abs(GUIDED_SHIFT) > GUIDED_MAX_SHIFT
+    use_motion = GUIDED_PREDICTION == "motion" or (GUIDED_PREDICTION == "hybrid" and fast)        # #089: hybrid = motion only when fast
+    if GUIDED_WINDOW is not None and use_motion and GUIDED_PRED_MOTION is not None:   # #089: per-keypoint prediction
+        good = guided_matches(kp1, d1, kp2, d2, GUIDED_SHIFT, GUIDED_WINDOW, predict_pixels(f1, f2, GUIDED_PRED_MOTION))
+        if len(good) < GUIDED_MIN_MATCHES:
+            good = None
+    elif GUIDED_WINDOW is not None and abs(GUIDED_SHIFT) <= GUIDED_MAX_SHIFT:   # #087; #088: only when turning slowly, window at the previous shift
         good = guided_matches(kp1, d1, kp2, d2, GUIDED_SHIFT, GUIDED_WINDOW + 0.5 * abs(GUIDED_SHIFT))   # wider when turning fast
         if len(good) < GUIDED_MIN_MATCHES:
             good = None
@@ -617,6 +651,7 @@ def match_motion(f1, f2, period, rng, bf, model="cv", subpixel=False,
     if M0 is None:
         return None, None, 0
     M1, keep = fit_time(p[inl], tp[inl], q[inl], tq[inl], M0, model)
+    match_motion.last_pairs = (p[inl][keep], tp[inl][keep], q[inl][keep], tq[inl][keep]) if M1 is not None else None   # #090
     if BEARING_MIN_RANGE is not None and M1 is not None:   # #087: rotation from bearings, translation from 3D
         k = keep
         xb = refine_rotation_bearings(fit_time.last_params, p[inl][k], tp[inl][k], q[inl][k], tq[inl][k])
@@ -684,7 +719,8 @@ class ScanMotionEstimator:
                  detector="sift", surf_hessian=100.0, surf_upright=False, intensity_scale=1.0,
                  gate_min_matches=None, gate_max_rotation_deg=None, gate_max_rotation_change_deg=None,
                  save_rejected_dir=None, range_motion=None, range_hessian=10.0,
-                 intensity_normalisation="none", panorama_width=None, bearing_min_range=None, guided_window=None):
+                 intensity_normalisation="none", panorama_width=None, bearing_min_range=None, guided_window=None,
+                 guided_prediction="shift", multi_baseline=False, fuse_range=False):
         """`stuck_min`, `floor_only`, `elev`, `range_`: the stuck-match filter (#025-#027);
         left at their defaults they read the module globals STUCK_* at each call.
         `detector`, `surf_hessian`, `surf_upright`: the panorama features, see make_detector.
@@ -705,9 +741,10 @@ class ScanMotionEstimator:
             global W
             W = int(panorama_width)
         global BEARING_MIN_RANGE, GUIDED_WINDOW               # #087: module-wide, as W
-        global GUIDED_SHIFT
+        global GUIDED_SHIFT, GUIDED_PREDICTION
         BEARING_MIN_RANGE, GUIDED_WINDOW = bearing_min_range, guided_window
         GUIDED_SHIFT = 0.0
+        GUIDED_PREDICTION = guided_prediction
         self.intensity_scale = intensity_scale
         self.stuck_min, self.floor_only, self.elev, self.range_ = stuck_min, floor_only, elev, range_
         self.detector_name = detector
@@ -715,6 +752,12 @@ class ScanMotionEstimator:
         self.bf = cv2.BFMatcher(cv2.NORM_HAMMING if detector == "orb" else cv2.NORM_L2)   # #088: ORB is binary
         self.rng = np.random.default_rng(seed)
         self.prev = None
+        self.last_motion = None
+        # #090: joint fit with more matches - multi_baseline: also scan k-2 <-> k (times -2..-1 periods, the same motion curve);
+        # fuse_range: also the range-panorama matches of k-1 <-> k (computed on every scan, cached for the next).
+        self.multi_baseline, self.fuse_range = multi_baseline, fuse_range
+        self.prev2 = None; self.prev_range_feat = None
+        self.n_joint = 0; self.joint_pairs = []
         self.ratios = []; self.last_factor = 1.0
         self.gate = (gate_min_matches, gate_max_rotation_deg, gate_max_rotation_change_deg)
         self.save_rejected_dir = save_rejected_dir
@@ -742,6 +785,8 @@ class ScanMotionEstimator:
             if self.range_motion is not None:
                 self._range(xyz, ts, ring, None, 0)
             return None, 0
+        global GUIDED_PRED_MOTION
+        GUIDED_PRED_MOTION = self.last_motion if GUIDED_PREDICTION in ("motion", "hybrid") else None   # #089: constant velocity
         M0, M1, n = match_motion(prev, cur, self.period, self.rng, self.bf, self.model, self.subpixel,
                                  self.stuck_min, self.floor_only, self.elev, self.range_)
         if M1 is None and GUIDED_WINDOW is not None:          # #088: guided matching failed (fast rotation) -> brute force for this scan
@@ -766,10 +811,54 @@ class ScanMotionEstimator:
             self.last_factor = f
         self.last_params = match_motion.last_params if M1 is not None else None
         self.last_t_start = cur[5]
+        if M1 is not None and (self.multi_baseline or self.fuse_range):          # #090
+            M1, n = self._joint(M1, n, prev, cur, xyz, ts, ring)
+        self.prev2 = prev
         M, n = self._gate(M1, n, prev, cur)
+        self.last_motion = M if M is not None else None                   # #089: the next scan's prediction (None: shift mode)
         if self.range_motion is not None:
             M, n = self._range(xyz, ts, ring, M, n)
         return M, n
+
+    def _joint(self, M1, n, prev, cur, xyz, ts, ring):
+        """#090: refit the motion with the inlier pairs of k-1 <-> k plus those of k-2 <-> k (multi_baseline) and / or of the range
+        panoramas k-1 <-> k (fuse_range), all on the same motion curve.  The extra matching must not disturb what the next scan
+        inherits (the guided shift / prediction, the stored parameters), so those are saved and restored."""
+        global GUIDED_SHIFT, GUIDED_PRED_MOTION, GUIDED_PREDICTION
+        base = match_motion.last_pairs
+        if base is None:
+            return M1, n
+        sets, saved = [base], (GUIDED_SHIFT, GUIDED_PRED_MOTION, GUIDED_PREDICTION)
+        try:
+            if self.multi_baseline and self.prev2 is not None:
+                GUIDED_PREDICTION, GUIDED_PRED_MOTION = "motion", M1 @ M1          # predicted motion over two scans
+                _, M2, _ = match_motion(self.prev2, cur, self.period, self.rng, self.bf, self.model, self.subpixel,
+                                        self.stuck_min, self.floor_only, self.elev, self.range_)
+                if M2 is not None and match_motion.last_pairs is not None:
+                    sets.append(match_motion.last_pairs)
+            if self.fuse_range:
+                if not hasattr(self, "range_detector"):
+                    self.range_detector = make_detector("surf", 10.0); self.range_rng = np.random.default_rng(1000)
+                cur_r = range_features(xyz, ts, ring, self.range_detector)
+                prev_r, self.prev_range_feat = self.prev_range_feat, cur_r
+                if prev_r is not None:
+                    GUIDED_PREDICTION, GUIDED_PRED_MOTION = "motion", M1
+                    _, Mr, _ = match_motion(prev_r, cur_r, self.period, self.range_rng, self.bf, self.model, self.subpixel,
+                                            self.stuck_min, self.floor_only, self.elev, self.range_)
+                    if Mr is not None and match_motion.last_pairs is not None:
+                        sets.append(match_motion.last_pairs)
+        finally:
+            GUIDED_SHIFT, GUIDED_PRED_MOTION, GUIDED_PREDICTION = saved
+        if len(sets) == 1:
+            return M1, n
+        p, tp, q, tq = (np.concatenate([st[i] for st in sets]) for i in range(4))
+        Mj, keep = fit_time(p, tp, q, tq, M1, self.model)
+        if Mj is None:
+            return M1, n
+        self.n_joint += 1
+        self.joint_pairs.append([len(st[0]) for st in sets])
+        self.last_params = fit_time.last_params
+        return Mj, int(keep.sum())
 
     def _range(self, xyz, ts, ring, M, n):
         """The motion from the range panorama (#058), after the intensity estimate and its gate.

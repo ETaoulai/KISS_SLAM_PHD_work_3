@@ -131,7 +131,9 @@ ARMS = {"kissncd": "KISS-SLAM, kiss_icp NCD loader", "kissnodeskew": "KISS-SLAM,
         "upright": "i3 + upright SURF, two starts + range fallback (#086)",
         "guided": "i3 + upright SURF + guided matching C++, two starts + range fallback (#087)",
         "surftwofbv2": "NEW DEFAULT: upright SURF + guided matching, two starts + range fallback (#088)",
-        "surftwofbv2b": "NEW DEFAULT b: upright SURF + guided matching only when turning slowly (#088)"}
+        "surftwofbv2b": "NEW DEFAULT b: upright SURF + guided matching only when turning slowly (#088)",
+        "surftwofbv3": "upright SURF + guided matching, window at the motion-predicted position (#089)",
+        "surftwofbv4": "upright SURF + guided matching, HYBRID: shift when slow, motion prediction when fast (#089)"}
 # The arms compared from 25/9 on (decision M.T.): no indoor_detail, no ablations (rotation smoothed, translation only, ...).
 MAIN_ARMS = ["kiss", "kissnodeskew", "sift", "surf", "surftwo", "surftwom2", "surftwom4"]
 if "--all-arms" not in sys.argv:

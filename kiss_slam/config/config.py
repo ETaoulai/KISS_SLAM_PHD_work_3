@@ -172,6 +172,10 @@ class ImageDeskewConfig(BaseModel):
     rotation_from_bearings: Optional[float] = None
     # Default 40 since #088 (ΑΠΟΦΑΣΗ Μ.Τ. 2/10): with upright SURF, rotation -3.5 %, RTE -2 %, real time (#087).  None = every result before #088.
     guided_matching_window: Optional[float] = 40.0
+    # #089: centre of the guided window - "shift" (median column shift of the previous scan; guided only when turning slowly, #088) or
+    # "motion" (each keypoint's 3D point moved by the previous scan's motion and projected into the new panorama; guided also when fast).
+    # "hybrid": the shift while turning slowly (|shift| <= 20 columns), the motion prediction when fast (instead of brute force).
+    guided_prediction: Literal["shift", "motion", "hybrid"] = "shift"
     # Adaptive threshold: fixed at this value (m) for the whole run (#031).
     # None = KISS adaptive (updated from the ICP correction of the initial guess).
     fixed_sigma: Optional[float] = 2.0
