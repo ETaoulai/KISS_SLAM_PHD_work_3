@@ -46,7 +46,7 @@ log. Ένα σημείο ανά είδος πληροφορίας — μην α�
   (git → GitHub **`ETaoulai/KISS_SLAM_PHD_work_3`**, private, remote `origin`, από 29/9: ένας κλάδος, `main` = όλη η δουλειά ως το #080 (`e4ecb2a`).
   Τα παλιά: `KISS_SLAM_PHD_work_2` = remote `archive2` (κλάδοι `after_two_start`, `vertical_drift`, `intensity_norm`, `vertical_constraint`, `fast_fallback`)·
   `KISS_SLAM_PHD_work` = remote `archive` (κλάδοι `main` … `gating`, σταματά στο `fa86f3b`).)
-  **Ο `main` δεν αλλάζει απευθείας (απόφαση Μ.Τ. 26/9):** κάθε νέα δουλειά σε δικό της κλάδο από τον `origin/main` — τρέχων `after_080` (29/9).
+  **Ο `main` δεν αλλάζει απευθείας (απόφαση Μ.Τ. 26/9):** κάθε νέα δουλειά σε δικό της κλάδο από τον `origin/main` — τρέχων `rotation_bearing` (2/10, από τον `after_080`· #086–#091).
   Προσοχή: `push.default = upstream` — ένας κλάδος που παρακολουθεί τον `origin/main` σπρώχνει στον `main`· νέοι κλάδοι με `git push -u origin <κλάδος>`. OpenCV χτισμένο με SURF.
   Δεδομένα στο `/media/photogrammetry/A26C3DDF6C3DAF431/data/` (όχι στο `data/` του repo). Νέα datasets (NCD 2020 long / dynamic_spinning,
   Hilti 2021, NTU VIRAL) οργανωμένα ως σύνδεσμοι στο `/home/photogrammetry/kiss_data/` (ext4) — κατάσταση: `docs/datasets.md`.
