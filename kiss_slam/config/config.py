@@ -212,6 +212,9 @@ class ImageDeskewConfig(BaseModel):
     # local contrast equalisation.  Panorama columns: None = 1024 (every result before #075); 2048 = the Hilti Ouster's own.
     intensity_normalisation: Literal["none", "gain", "gain_clahe"] = "none"
     panorama_width: Optional[int] = None
+    # Vertical upscaling of the panorama for the detector (#089).  None = 8 (every result before).  4 suits 128-beam sensors (0.7 deg per
+    # ring: 8 over-samples 4x) - on underground_hard -26 % image time and -10 % rotation error.
+    panorama_up: Optional[int] = None
     range_hessian: float = 10.0
     # Folder for the panoramas + matches of every failed / rejected scan (rejected.csv lists them).  None = off.
     save_rejected_dir: Optional[str] = None

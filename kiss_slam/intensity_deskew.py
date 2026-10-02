@@ -720,7 +720,7 @@ class ScanMotionEstimator:
                  gate_min_matches=None, gate_max_rotation_deg=None, gate_max_rotation_change_deg=None,
                  save_rejected_dir=None, range_motion=None, range_hessian=10.0,
                  intensity_normalisation="none", panorama_width=None, bearing_min_range=None, guided_window=None,
-                 guided_prediction="shift", multi_baseline=False, fuse_range=False):
+                 guided_prediction="shift", multi_baseline=False, fuse_range=False, panorama_up=None):
         """`stuck_min`, `floor_only`, `elev`, `range_`: the stuck-match filter (#025-#027);
         left at their defaults they read the module globals STUCK_* at each call.
         `detector`, `surf_hessian`, `surf_upright`: the panorama features, see make_detector.
@@ -740,6 +740,9 @@ class ScanMotionEstimator:
         if panorama_width is not None:
             global W
             W = int(panorama_width)
+        if panorama_up is not None:                   # #089: vertical upscaling of the panorama (8 = every result before; 4 for 128 beams)
+            global UP
+            UP = int(panorama_up)
         global BEARING_MIN_RANGE, GUIDED_WINDOW               # #087: module-wide, as W
         global GUIDED_SHIFT, GUIDED_PREDICTION
         BEARING_MIN_RANGE, GUIDED_WINDOW = bearing_min_range, guided_window

@@ -6,9 +6,9 @@
                               [--parts=full|translation|rotation] [--rot-smooth=k] [--save-frames=<voxel m>] [--save-fraction=f]
                               [--gate [--gate-min=0] [--gate-rot=10] [--gate-drot=8]] [--fallback=identity|cv] [--two-start=<deg>|none] [--two-start-margin=0.02] [--range=fallback|candidate]
                               [--rotation-weight=100] [--save-failed]
-                              [--normalise=gain|gain_clahe] [--panorama-width=2048] [--image-start=false]
+                              [--normalise=gain|gain_clahe] [--panorama-width=2048] [--panorama-up=4] [--image-start=false]
                               [--stuck=none|<m>] [--sigma=adaptive|<m>] [--deskew=false]
-                              [--model=cv|car|ca] [--deskew-rotation=cv] [--redeskew] [--surf-upright | --no-upright]
+                              [--model=cv|car|ca] [--deskew-rotation=cv] [--redeskew] [--surf-upright | --no-upright] [--surf-hessian=<threshold>]
                               [--bearings=<min range m>] [--guided=<window px>|none] [--guided-predict=shift|motion]
 
 sequence: a 2020 sequence dir with raw_format/ouster_scan/*.pcd (kiss_slam/tools/ncd_pcd.py), or a
@@ -97,6 +97,8 @@ def main():
             config.image_deskew.use_as_initial_guess = opts["image-start"].lower() not in ("false", "0", "no", "off")
         if "normalise" in opts:                                  # per-scan intensity normalisation: gain | gain_clahe (#075)
             config.image_deskew.intensity_normalisation = opts["normalise"]
+        if "panorama-up" in opts:                                # vertical upscaling of the panorama, e.g. 4 for 128 beams (#089)
+            config.image_deskew.panorama_up = int(opts["panorama-up"])
         if "panorama-width" in opts:                             # panorama columns, e.g. 2048 for the Hilti Ouster (#075)
             config.image_deskew.panorama_width = int(opts["panorama-width"])
         if "rotation-weight" in opts:                            # rotation information of the node graph (#067)
@@ -117,6 +119,8 @@ def main():
             config.image_deskew.redeskew = True
         if "--surf-upright" in sys.argv:                         # upright SURF: no keypoint orientation (#086; default since #088)
             config.image_deskew.surf_upright = True
+        if "surf-hessian" in opts:                               # SURF Hessian threshold (default 100; #089: 200 = -21 % time on Ouster 128)
+            config.image_deskew.surf_hessian_threshold = float(opts["surf-hessian"])
         if "--no-upright" in sys.argv:                           # the SURF of every result before #088
             config.image_deskew.surf_upright = False
         if "bearings" in opts:                                   # rotation from bearings of matches beyond <m> (#087)

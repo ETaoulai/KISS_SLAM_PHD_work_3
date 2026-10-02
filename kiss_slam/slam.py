@@ -395,6 +395,7 @@ class KissSLAM:
                     range_hessian=self.image_cfg.range_hessian,
                     intensity_normalisation=self.image_cfg.intensity_normalisation,
                     panorama_width=self.image_cfg.panorama_width,
+                    panorama_up=self.image_cfg.panorama_up,                      # #089
                     bearing_min_range=self.image_cfg.rotation_from_bearings,      # #087
                     guided_window=self.image_cfg.guided_matching_window,         # #087
                     guided_prediction=self.image_cfg.guided_prediction,          # #089
