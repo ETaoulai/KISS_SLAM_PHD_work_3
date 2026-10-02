@@ -29,6 +29,16 @@ from scipy.spatial.transform import Rotation
 
 W, UP, MIN_RANGE = 1024, 8, 1.0          # panorama columns · vertical upscaling for SIFT · drop the operator
 RATIO, RANSAC_THR, RANSAC_IT, MIN_INL, FIT_THR = 0.75, 0.30, 400, 10, 0.10
+# #087 (branch rotation_bearing), both off by default:
+# BEARING_MIN_RANGE (m): after the 3D fit, re-estimate the ROTATION parameters from the directions (bearings) of the matches farther than
+#   this, translation fixed - the rotation then carries no range noise and no wrong depth at edges.  None = off.
+# GUIDED_WINDOW (px, azimuth): match each keypoint only against the next panorama's keypoints within this many columns and GUIDED_ROWS
+#   rings of its own position (wrap-around at 0/360 deg), ratio test inside the window.  None = brute force over the whole panorama.
+BEARING_MIN_RANGE = None
+BEARING_MIN_PAIRS = 20
+GUIDED_WINDOW = None
+GUIDED_ROWS = 4
+GUIDED_K = 16
 # RANSAC stops once the best consensus so far makes a better one unlikely: after
 # log(1 - RANSAC_CONF) / log(1 - w^3) hypotheses, w = best inlier fraction (≈ 50 at w = 0.5 instead of
 # 400), never more than RANSAC_IT; hypotheses are drawn and scored RANSAC_BATCH at a time in numpy.
@@ -209,6 +219,41 @@ def lookup(P, T, valid, kp, subpixel=False):
     return None
 
 
+def lookup_batch(P, T, valid, xy, subpixel=False):
+    """`lookup` for N keypoints at once (#087, speed): pixel coordinates xy (N, 2) -> points (N, 3), times (N,), ok (N,).
+
+    Exactly the rules of `lookup`: with `subpixel`, bilinear over the 4 surrounding pixels when all are valid and their ranges agree
+    within EDGE_REL; otherwise the nearest pixel, then its row neighbours dc = 0, -1, 1, -2, 2 until a valid one.  Rounding as Python's
+    round (half to even, as np.round).  Same results as the per-keypoint loop, without the Python loop."""
+    n = len(xy)
+    pts, ts, ok = np.full((n, 3), np.nan), np.full(n, np.nan), np.zeros(n, bool)
+    if n == 0:
+        return pts, ts, ok
+    rows = P.shape[0]
+    x, rf = xy[:, 0], (xy[:, 1] + 0.5) / UP - 0.5
+    if subpixel:
+        r0, c0 = np.floor(rf).astype(int), np.floor(x).astype(int)
+        inr = (r0 >= 0) & (r0 < rows - 1)
+        r0c = np.clip(r0, 0, rows - 2)
+        rr = np.stack([r0c, r0c, r0c + 1, r0c + 1], 1); cc = np.stack([c0 % W, (c0 + 1) % W, c0 % W, (c0 + 1) % W], 1)
+        vall = valid[rr, cc].all(1)
+        rng = np.linalg.norm(P[rr, cc], axis=2)
+        good = inr & vall & (rng.max(1) - rng.min(1) < EDGE_REL * rng.min(1))
+        a, b = rf - r0, x - c0
+        w = np.stack([(1 - a) * (1 - b), (1 - a) * b, a * (1 - b), a * b], 1)
+        pts[good] = np.einsum("nk,nkd->nd", w[good], P[rr[good], cc[good]])
+        ts[good] = np.einsum("nk,nk->n", w[good], T[rr[good], cc[good]])
+        ok |= good
+    rest = ~ok
+    r = np.clip(np.round(rf).astype(int), 0, rows - 1); c = np.round(x).astype(int) % W
+    for dc in (0, -1, 1, -2, 2):
+        cc = (c + dc) % W
+        hit = rest & valid[r, cc]
+        pts[hit], ts[hit] = P[r[hit], cc[hit]], T[r[hit], cc[hit]]
+        ok |= hit; rest &= ~hit
+    return pts, ts, ok
+
+
 def kabsch(A, B):
     """4x4 M with A ≈ R·B + t."""
     ca, cb = A.mean(0), B.mean(0)
@@ -289,9 +334,26 @@ def pose_at(x, t):
     return rot, tr
 
 
+def _rotmats(rv):
+    """Rotation matrices of N rotation vectors (Rodrigues, series below 1e-4 rad) - the same as Rotation.from_rotvec(rv).as_matrix()
+    up to rounding, without building scipy Rotation objects (#087, speed of the time fit)."""
+    th = np.linalg.norm(rv, axis=1)
+    small = th < 1e-4
+    t = np.where(small, 1.0, th)
+    a = np.where(small, 1 - th ** 2 / 6, np.sin(t) / t)
+    b = np.where(small, 0.5 - th ** 2 / 24, (1 - np.cos(t)) / t ** 2)
+    K = _skew(rv)
+    return np.eye(3) + a[:, None, None] * K + b[:, None, None] * (K @ K)
+
+
+def _rotate(rv, pts):
+    """Exp(rv_i) . pts_i for N rotation vectors and points."""
+    return np.einsum("nij,nj->ni", _rotmats(rv), pts)
+
+
 def residual(x, p, tp, q, tq):
     rp, sp = pose_at(x, tp); rq, sq = pose_at(x, tq)
-    return (Rotation.from_rotvec(rp).apply(p) + sp - Rotation.from_rotvec(rq).apply(q) - sq).ravel()
+    return (_rotate(rp, p) + sp - _rotate(rq, q) - sq).ravel()
 
 
 def _skew(v):
@@ -322,7 +384,7 @@ def residual_jac(x, p, tp, q, tq):
     J = np.zeros((len(p), 3, len(x)))
     for pts, t, sign in ((p, tp, 1.0), (q, tq, -1.0)):
         rot, _ = pose_at(x, t)
-        D = sign * _d_rotate(rot, Rotation.from_rotvec(rot).apply(pts))
+        D = sign * _d_rotate(rot, _rotate(rot, pts))
         J[:, :, 0:3] += D * t[:, None, None]                       # w
         J[:, :, 3:6] += sign * t[:, None, None] * np.eye(3)        # v
         if len(x) >= 9:
@@ -419,6 +481,68 @@ def range_features(xyz, ts, ring, detector, _clahe=[]):
 _DEFAULT = object()   # "use the module-level knob" (scripts set STUCK_* after import)
 
 
+try:                                                              # #087: C++ guided matching, if built
+    from kiss_slam import _guided_match as _guided_cpp
+except ImportError:
+    _guided_cpp = None
+
+
+def guided_matches(kp1, d1, kp2, d2):
+    """Matches of kp1 among the kp2 within GUIDED_WINDOW columns / GUIDED_ROWS rings of the same pixel (#087), as cv2.DMatch.
+
+    Consecutive scans are 0.1 s apart: a feature moves a few pixels (fast rotation ~30), so a look-alike elsewhere in the panorama
+    (repeated facades) cannot win, and the cost is N x GUIDED_K descriptor distances instead of N x M.  Ratio test (RATIO) among the
+    candidates of the window; one candidate only is accepted when its distance is below the median best distance."""
+    if len(kp1) < 2 or len(kp2) < 2:
+        return []
+    a = np.array([k.pt for k in kp1]); b = np.array([k.pt for k in kp2])
+    if _guided_cpp is not None:                                   # C++ (scripts/build_guided_match.sh): rectangular window, all candidates
+        j, best, second = _guided_cpp.guided_match(a.astype(np.float32), d1, b.astype(np.float32), d2, float(W), float(GUIDED_WINDOW),
+                                                   float(GUIDED_ROWS * UP))
+        fin = np.isfinite(best)
+        if not fin.any():
+            return []
+        ok = fin & ((best < RATIO * second) | (~np.isfinite(second) & (best < np.median(best[fin]))))
+        return [cv2.DMatch(int(i), int(j[i]), float(best[i])) for i in np.flatnonzero(ok)]
+    from scipy.spatial import cKDTree
+    sy = GUIDED_WINDOW / (GUIDED_ROWS * UP)                       # anisotropic window as a circle of radius GUIDED_WINDOW
+    bb = np.concatenate([b, b + [W, 0], b - [W, 0]]); src = np.tile(np.arange(len(b)), 3)
+    tree = cKDTree(bb * [1.0, sy])
+    dist, idx = tree.query(a * [1.0, sy], k=min(GUIDED_K, len(bb)), distance_upper_bound=GUIDED_WINDOW)
+    dist, idx = np.atleast_2d(dist), np.atleast_2d(idx)
+    valid = np.isfinite(dist)
+    cand = np.where(valid, src[np.minimum(idx, len(bb) - 1)], 0)
+    dd = np.linalg.norm(d1[:, None, :].astype(np.float32) - d2[cand].astype(np.float32), axis=2)
+    dd[~valid] = np.inf
+    order = np.argsort(dd, axis=1)
+    best, second = np.take_along_axis(dd, order[:, :1], 1)[:, 0], np.take_along_axis(dd, order[:, 1:2], 1)[:, 0] if dd.shape[1] > 1 else np.full(len(dd), np.inf)
+    j = cand[np.arange(len(cand)), order[:, 0]]
+    fin = np.isfinite(best)
+    ok = fin & ((best < RATIO * second) | (~np.isfinite(second) & (best < np.median(best[fin]) if fin.any() else False)))
+    return [cv2.DMatch(int(i), int(j[i]), float(best[i])) for i in np.flatnonzero(ok)]
+
+
+def refine_rotation_bearings(x, p, tp, q, tq):
+    """The rotation parameters of x re-estimated from bearings (#087): q, moved by the fitted motion into the sensor frame at the
+    time of p, must point where p points.  Matches nearer than BEARING_MIN_RANGE are left out (their direction depends on the
+    translation); translation parameters fixed.  Returns the new x, or None when too few far matches."""
+    far = (np.linalg.norm(p, axis=1) > BEARING_MIN_RANGE) & (np.linalg.norm(q, axis=1) > BEARING_MIN_RANGE)
+    if far.sum() < BEARING_MIN_PAIRS:
+        return None
+    p, tp, q, tq = p[far], tp[far], q[far], tq[far]
+    up = p / np.linalg.norm(p, axis=1, keepdims=True)
+    idx = [0, 1, 2] + ([6, 7, 8] if len(x) >= 9 else [])
+
+    def res(r):
+        xx = x.copy(); xx[idx] = r
+        rp, sp = pose_at(xx, tp); rq, sq = pose_at(xx, tq)
+        d = Rotation.from_rotvec(rp).inv().apply(Rotation.from_rotvec(rq).apply(q) + sq - sp)
+        return (d / np.linalg.norm(d, axis=1, keepdims=True) - up).ravel()
+    r = least_squares(res, x[idx], loss="soft_l1", f_scale=0.005).x
+    xx = x.copy(); xx[idx] = r
+    return xx
+
+
 def match_motion(f1, f2, period, rng, bf, model="cv", subpixel=False,
                  stuck_min=_DEFAULT, floor_only=_DEFAULT, elev=_DEFAULT, range_=_DEFAULT):
     """Motion of the later of two consecutive scans → (rigid M0, timed M1, n inliers).
@@ -441,7 +565,10 @@ def match_motion(f1, f2, period, rng, bf, model="cv", subpixel=False,
     match_motion.last_good = []
     if d1 is None or d2 is None or len(kp1) < 2 or len(kp2) < 2:
         return None, None, 0
-    good = [m for m, n in bf.knnMatch(d1, d2, k=2) if m.distance < RATIO * n.distance]
+    if GUIDED_WINDOW is not None:                         # #087
+        good = guided_matches(kp1, d1, kp2, d2)
+    else:
+        good = [m for m, n in bf.knnMatch(d1, d2, k=2) if m.distance < RATIO * n.distance]
     match_motion.last_good = good                      # for the images of rejected pairs (#054)
     if PIXEL_MASK is not None:
         def on_mask(kp):
@@ -449,14 +576,16 @@ def match_motion(f1, f2, period, rng, bf, model="cv", subpixel=False,
             r = min(max(int(round((v + 0.5) / UP - 0.5)), 0), PIXEL_MASK.shape[0] - 1)
             return PIXEL_MASK[r, int(round(u)) % W]
         good = [m for m in good if not on_mask(kp2[m.trainIdx])]
-    pairs = [(lookup(P1, T1, v1, kp1[m.queryIdx], subpixel), lookup(P2, T2, v2, kp2[m.trainIdx], subpixel))
-             for m in good]
-    pairs = [(x, y) for x, y in pairs if x is not None and y is not None]
-    if len(pairs) < MIN_INL:
+    xy1 = np.array([kp1[m.queryIdx].pt for m in good]).reshape(-1, 2)
+    xy2 = np.array([kp2[m.trainIdx].pt for m in good]).reshape(-1, 2)
+    p, tp, ok1 = lookup_batch(P1, T1, v1, xy1, subpixel)          # #087: vectorised, same results as the per-keypoint lookup
+    q, tq, ok2 = lookup_batch(P2, T2, v2, xy2, subpixel)
+    both = ok1 & ok2
+    if both.sum() < MIN_INL:
         return None, None, 0
-    p = np.array([x[0] for x, _ in pairs]); q = np.array([y[0] for _, y in pairs])
-    tp = (np.array([x[1] for x, _ in pairs]) - t_start) / period     # t = 0: start of the later scan
-    tq = (np.array([y[1] for _, y in pairs]) - t_start) / period
+    p, q = p[both], q[both]
+    tp = (tp[both] - t_start) / period                               # t = 0: start of the later scan
+    tq = (tq[both] - t_start) / period
     if stuck_min is not None:
         moved = np.linalg.norm(p - q, axis=1) >= stuck_min
         if floor_only:
@@ -469,6 +598,13 @@ def match_motion(f1, f2, period, rng, bf, model="cv", subpixel=False,
     if M0 is None:
         return None, None, 0
     M1, keep = fit_time(p[inl], tp[inl], q[inl], tq[inl], M0, model)
+    if BEARING_MIN_RANGE is not None and M1 is not None:   # #087: rotation from bearings, translation from 3D
+        k = keep
+        xb = refine_rotation_bearings(fit_time.last_params, p[inl][k], tp[inl][k], q[inl][k], tq[inl][k])
+        if xb is not None:
+            rot, tr = pose_at(xb, np.array([1.0]))
+            M1 = np.eye(4); M1[:3, :3] = Rotation.from_rotvec(rot[0]).as_matrix(); M1[:3, 3] = tr[0]
+            fit_time.last_params = xb
     if TRANS_FACTOR != 1.0:
         for M in (M0, M1):
             if M is not None:
@@ -529,7 +665,7 @@ class ScanMotionEstimator:
                  detector="sift", surf_hessian=100.0, surf_upright=False, intensity_scale=1.0,
                  gate_min_matches=None, gate_max_rotation_deg=None, gate_max_rotation_change_deg=None,
                  save_rejected_dir=None, range_motion=None, range_hessian=10.0,
-                 intensity_normalisation="none", panorama_width=None):
+                 intensity_normalisation="none", panorama_width=None, bearing_min_range=None, guided_window=None):
         """`stuck_min`, `floor_only`, `elev`, `range_`: the stuck-match filter (#025-#027);
         left at their defaults they read the module globals STUCK_* at each call.
         `detector`, `surf_hessian`, `surf_upright`: the panorama features, see make_detector.
@@ -549,6 +685,8 @@ class ScanMotionEstimator:
         if panorama_width is not None:
             global W
             W = int(panorama_width)
+        global BEARING_MIN_RANGE, GUIDED_WINDOW               # #087: module-wide, as W
+        BEARING_MIN_RANGE, GUIDED_WINDOW = bearing_min_range, guided_window
         self.intensity_scale = intensity_scale
         self.stuck_min, self.floor_only, self.elev, self.range_ = stuck_min, floor_only, elev, range_
         self.detector_name = detector

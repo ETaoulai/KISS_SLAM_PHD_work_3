@@ -165,6 +165,11 @@ class ImageDeskewConfig(BaseModel):
     # Diagnostic only (#086, uses the ground truth): an .npz with "motion" (N,4,4) per scan (NaN = keep the method's) that
     # REPLACES the deskew motion only - ICP start, two starts, map unchanged.  scripts/make_oracle_motion.py writes it.
     deskew_motion_file: Optional[str] = None
+    # #087 (branch rotation_bearing): rotation_from_bearings = min range (m) of the matches whose directions re-estimate the
+    # rotation after the 3D fit (translation fixed); guided_matching_window = match only within this many panorama columns
+    # (and 4 rings) of the same pixel instead of brute force over the whole panorama.  None = off (every result before #087).
+    rotation_from_bearings: Optional[float] = None
+    guided_matching_window: Optional[float] = None
     # Adaptive threshold: fixed at this value (m) for the whole run (#031).
     # None = KISS adaptive (updated from the ICP correction of the initial guess).
     fixed_sigma: Optional[float] = 2.0

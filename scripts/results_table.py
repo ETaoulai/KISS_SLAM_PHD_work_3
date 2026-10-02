@@ -128,7 +128,8 @@ ARMS = {"kissncd": "KISS-SLAM, kiss_icp NCD loader", "kissnodeskew": "KISS-SLAM,
         "rotredeskew": "i3 + SURF, two starts + range fallback, second deskew pass with ICP motion (rotation #086)",
         "rotsmooth3": "i3 + SURF, two starts + range fallback, image rotation smoothed over 3 scans (rotation #086)",
         "oracledeskew": "i3 + SURF, two starts + range fallback, DESKEW FROM GROUND TRUTH (diagnostic, #086)",
-        "upright": "i3 + upright SURF, two starts + range fallback (#086)"}
+        "upright": "i3 + upright SURF, two starts + range fallback (#086)",
+        "guided": "i3 + upright SURF + guided matching C++, two starts + range fallback (#087)"}
 # The arms compared from 25/9 on (decision M.T.): no indoor_detail, no ablations (rotation smoothed, translation only, ...).
 MAIN_ARMS = ["kiss", "kissnodeskew", "sift", "surf", "surftwo", "surftwom2", "surftwom4"]
 if "--all-arms" not in sys.argv:

@@ -9,6 +9,7 @@
                               [--normalise=gain|gain_clahe] [--panorama-width=2048] [--image-start=false]
                               [--stuck=none|<m>] [--sigma=adaptive|<m>] [--deskew=false]
                               [--model=cv|car|ca] [--deskew-rotation=cv] [--redeskew] [--surf-upright]
+                              [--bearings=<min range m>] [--guided=<window px>]
 
 sequence: a 2020 sequence dir with raw_format/ouster_scan/*.pcd (kiss_slam/tools/ncd_pcd.py), or a
           .bag file, or a folder whose *.bag are ONE split sequence (read in time order; 2021 bags), or a KITTI raw
@@ -116,6 +117,10 @@ def main():
             config.image_deskew.redeskew = True
         if "--surf-upright" in sys.argv:                         # upright SURF: no keypoint orientation (#086)
             config.image_deskew.surf_upright = True
+        if "bearings" in opts:                                   # rotation from bearings of matches beyond <m> (#087)
+            config.image_deskew.rotation_from_bearings = float(opts["bearings"])
+        if "guided" in opts:                                     # guided matching within <px> columns (#087)
+            config.image_deskew.guided_matching_window = float(opts["guided"])
         if "oracle-deskew" in opts:                              # diagnostic: deskew from ground-truth motion (#086)
             config.image_deskew.deskew_motion_file = opts["oracle-deskew"]
         if "model" in opts:                                      # image motion model: cv | car | ca (#021, #086)
